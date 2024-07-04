@@ -150,7 +150,7 @@ void compute_sparse_mean_and_variance(
     // denominator for consistency in pca_utils::clean_up_projected.
     // Magnitude doesn't matter when scaling for
     // pca_utils::process_scale_vector anyway.
-    variance /= (NR - 1);
+    variance /= NR - 1;
 }
 
 template<class IrlbaSparseMatrix_, typename Block_, class Index_, class EigenVector_, class EigenMatrix_>
@@ -225,6 +225,15 @@ void compute_dense_mean_and_variance(
         }
     }
 
+    // If we're not dealing with weights, we compute the actual sample
+    // variance for easy interpretation (and to match up with the
+    // per-PC calculations in pca_utils::clean_up).
+    //
+    // If we're dealing with weights, the concept of the sample
+    // variance becomes somewhat weird, but we just use the same
+    // denominator for consistency in pca_utils::clean_up_projected.
+    // Magnitude doesn't matter when scaling for
+    // pca_utils::process_scale_vector anyway.
     variance/= NR - 1;
 }
 
@@ -292,6 +301,19 @@ void compute_blockwise_mean_and_variance_tatami(
     } else {
         typedef typename EigenVector_::Scalar Scalar;
 
+        std::vector<std::pair<size_t, Scalar> > block_multipliers;
+        block_multipliers.reserve(nblocks);
+        for (size_t b = 0; b < nblocks; ++b) {
+            auto bsize = block_size[b];
+            if (bsize > 1) { // skipping blocks with NaN variances.
+                Scalar mult = bsize - 1; // need to convert variances back into sum of squared differences.
+                if (block_details.weighted) {
+                    mult *= block_details.per_element_weight[b];
+                }
+                multipliers.emplace_back(b, mult);
+            }
+        }
+
         tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
             std::vector<std::vector<Scalar_> > re_centers, re_variances;
             re_centers.reserve(nblocks);
@@ -304,7 +326,7 @@ void compute_blockwise_mean_and_variance_tatami(
             std::vector<Value_> vbuffer(length);
 
             if (mat->is_sparse()) {
-                std::vector<tatami_stats::RunningSparse<Scalar_, Value_, Index_> > running;
+                std::vector<tatami_stats::variances::RunningSparse<Scalar_, Value_, Index_> > running;
                 running.reserve(nblocks);
                 for (size_t b = 0; b < nblocks; ++b) {
                     running.emplace_back(re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false, /* subtract = */ start);
@@ -317,8 +339,12 @@ void compute_blockwise_mean_and_variance_tatami(
                     running[block[c]].add(range.value, range.index, range.number);
                 }
 
+                for (size_t b = 0; b < nblocks; ++b) {
+                    running[b].finish();
+                }
+
             } else {
-                std::vector<tatami_stats::RunningDense<Scalar_, Value_, Index_> > running;
+                std::vector<tatami_stats::variances::RunningDense<Scalar_, Value_, Index_> > running;
                 running.reserve(nblocks);
                 for (size_t b = 0; b < nblocks; ++b) {
                     running.emplace_back(re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false);
@@ -329,6 +355,10 @@ void compute_blockwise_mean_and_variance_tatami(
                     auto ptr = ext->fetch(vbuffer.data());
                     running[block[c]].add(ptr);
                 }
+
+                for (size_t b = 0; b < nblocks; ++b) {
+                    running[b].finish();
+                }
             }
 
             auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
@@ -336,10 +366,22 @@ void compute_blockwise_mean_and_variance_tatami(
                 for (size_t b = 0; b < nblocks; ++b) {
                     mptr[b] = re_centers[b][r];
                 }
-                auto& my_var = variances[r + start];
-                for (size_t b = 0; b < nblocks; ++b) {
-                    my_var += re_variances[b][r];
+            }
+
+            for (Index_ r = 0; r < length; ++r, mptr += nblocks) {
+                for (const auto& bm : block_multipliers) {
+                    my_var += re_variances[bm.first][r] * bm.second;
                 }
+
+                // If we're not dealing with weights, we compute the actual sample
+                // variance for easy interpretation (and to match up with the
+                // per-PC calculations in pca_utils::clean_up).
+                //
+                // If we're dealing with weights, the concept of the sample
+                // variance becomes somewhat weird, but we just use the same
+                // denominator for consistency in pca_utils::clean_up_projected.
+                // Magnitude doesn't matter when scaling for
+                // pca_utils::process_scale_vector anyway.
                 my_var /= NC - 1;
             }
         }, NR, nthreads);
