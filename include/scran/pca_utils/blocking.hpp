@@ -28,14 +28,6 @@ struct BlockingDetails {
 };
 
 template<typename Index_, class EigenVector_, typename Block_>
-BlockingDetails<Index_, EigenVector_> compute_blocking_details(Index_ ncells, const Block_* block) {
-    auto bsizes = tatami_stats::tabulate_groups(block, ncells);
-    BlockingDetails<Index_, EigenVector_> output;
-    output.block_size.swap(bsizes);
-    return output;
-}
-
-template<typename Index_, class EigenVector_, typename Block_>
 BlockingDetails<Index_, EigenVector_> compute_blocking_details(
     Index_ ncells,
     const Block_* block,
@@ -93,8 +85,76 @@ BlockingDetails<Index_, EigenVector_> compute_blocking_details(
     return output;
 }
 
+template<typename Num_, typename Value_, typename Index_, typename Block_, typename EigenVector_>
+void compute_sparse_mean_and_variance(
+    Num_ num_nonzero, 
+    const Value_* values, 
+    const Index_* indices, 
+    const Block* block, 
+    const BlockingDetails<Index_, EigenVector_>& block_details,
+    Float_* centers,
+    Float& variance,
+    std::vector<BlockSize_>& block_copy) 
+{
+    const auto& block_size = block_details.block_size;
+    size_t nblocks = block_size.size();
+
+    std::fill_n(center, nblocks, 0);
+    for (Num_ i = 0; i < num_nonzero; ++i) {
+        centers[block[indices[i]]] += values[i];
+    }
+    for (size_t b = 0; b < nblocks; ++b) {
+        auto bsize = block_size[b];
+        if (bsize) {
+            centers[b] /= bsize;
+        }
+    }
+
+    // Computing the variance from the sum of squared differences.
+    // This is technically not the correct variance estimate if we
+    // were to consider the loss of residual d.f. from estimating
+    // the block means, but it's what the PCA sees, so whatever.
+    variance = 0;
+    std::copy(block_size.begin(), block_size.end(), block_copy.begin());
+
+    if (block_details.weighted) {
+        for (Num_ i = 0; i < num_nonzero; ++i) {
+            Block_ curb = block[indices[i]];
+            auto diff = values[i] - centers[curb];
+            variance += diff * diff * block_details.per_element_weight[curb];
+            --block_copy[curb];
+        }
+        for (size_t b = 0; b < nblocks; ++b) {
+            auto val = centers[b];
+            variance += val * val * block_copy[b] * block_details.per_element_weight[b];
+        }
+    } else {
+        for (Num_ i = 0; i < num_nonzero; ++i) {
+            Block_ curb = block[indices[i]];
+            auto diff = values[i] - centers[curb];
+            variance += diff * diff;
+            --block_copy[curb];
+        }
+        for (size_t b = 0; b < nblocks; ++b) {
+            auto val = centers[b];
+            variance += val * val * block_copy[b];
+        }
+    }
+
+    // If we're not dealing with weights, we compute the actual sample
+    // variance for easy interpretation (and to match up with the
+    // per-PC calculations in pca_utils::clean_up).
+    //
+    // If we're dealing with weights, the concept of the sample
+    // variance becomes somewhat weird, but we just use the same
+    // denominator for consistency in pca_utils::clean_up_projected.
+    // Magnitude doesn't matter when scaling for
+    // pca_utils::process_scale_vector anyway.
+    variance /= (NR - 1);
+}
+
 template<class IrlbaSparseMatrix_, typename Block_, class Index_, class EigenVector_, class EigenMatrix_>
-void compute_blockwise_mean_and_variance_irlba_sparse(
+void compute_blockwise_mean_and_variance_realized_sparse(
     const IrlbaSparseMatrix_& emat, // this should be column-major with genes in the columns.
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details,
@@ -108,80 +168,69 @@ void compute_blockwise_mean_and_variance_irlba_sparse(
         const auto& indices = emat.get_indices();
         const auto& ptrs = emat.get_pointers();
 
-        const auto& block_size = block_details.block_size;
-        size_t nblocks = block_size.size();
-
+        size_t nblocks = block_details.block_size.size();
         static_assert(!EigenMatrix_::IsRowMajor);
         auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
         std::vector<Index_> block_copy(nblocks);
 
         for (size_t c = start, end = start + length; c < end; ++c, mptr += nblocks) {
             auto offset = ptrs[c];
-            size_t num_entries = ptrs[c + 1] - offset;
-            auto value_ptr = values.data() + offset;
-            auto index_ptr = indices.data() + offset;
-
-            // Computing the block-wise means.
-            std::fill_n(mptr, nblocks, 0);
-            for (size_t i = 0; i < num_entries; ++i) {
-                mptr[block[index_ptr[i]]] += value_ptr[i];
-            }
-            for (size_t b = 0; b < nblocks; ++b) {
-                auto bsize = block_size[b];
-                if (bsize) {
-                    mptr[b] /= bsize;
-                }
-            }
-            centers.col(c) = buffer;
-
-            // Computing the variance from the sum of squared differences.
-            // This is technically not the correct variance estimate if we
-            // were to consider the loss of residual d.f. from estimating
-            // the block means, but it's what the PCA sees, so whatever.
-            auto& proxyvar = variances[c];
-            proxyvar = 0;
-            std::copy(block_size.begin(), block_size.end(), block_copy.begin());
-
-            if (block_details.weighted) {
-                for (size_t i = 0; i < num_entries; ++i) {
-                    Block_ curb = block[index_ptr[i]];
-                    auto diff = value_ptr[i] - mptr[curb];
-                    proxyvar += diff * diff * block_details.per_element_weight[curb];
-                    --block_copy[curb];
-                }
-                for (size_t b = 0; b < nblocks; ++b) {
-                    auto val = mptr[b];
-                    proxyvar += val * val * block_copy[b] * block_details.per_element_weight[b];
-                }
-            } else {
-                for (size_t i = 0; i < num_entries; ++i) {
-                    Block_ curb = block[index_ptr[i]];
-                    auto diff = value_ptr[i] - mptr[curb];
-                    proxyvar += diff * diff;
-                    --block_copy[curb];
-                }
-                for (size_t b = 0; b < nblocks; ++b) {
-                    auto val = mptr[b];
-                    proxyvar += val * val * block_copy[b];
-                }
-            }
-
-            // If we're not dealing with weights, we compute the actual sample
-            // variance for easy interpretation (and to match up with the
-            // per-PC calculations in pca_utils::clean_up).
-            //
-            // If we're dealing with weights, the concept of the sample
-            // variance becomes somewhat weird, but we just use the same
-            // denominator for consistency in pca_utils::clean_up_projected.
-            // Magnitude doesn't matter when scaling for
-            // pca_utils::process_scale_vector anyway.
-            proxyvar /= NR - 1;
+            compute_sparse_mean_and_variance(
+                ptrs[c + 1] - offset,
+                values.data() + offset,
+                indices.data() + offset,
+                block,
+                block_details,
+                mptr,
+                variances[c],
+                block_copy
+            );
         }
     }, emat.cols(), nthreads);
 }
 
+template<typename Num_, typename Value_, typename Block_, typename Index_, typename EigenVector_>
+void compute_dense_mean_and_variance(
+    Num_ number, 
+    const Value_* values, 
+    const Block* block, 
+    const BlockingDetails<Index_, EigenVector_>& block_details,
+    Float_* centers,
+    Float& variance) 
+{
+    std::fill_n(centers, nblocks, 0);
+    for (size_t r = 0; r < NR; ++r) {
+        centers[block[r]] += values[r];
+    }
+    for (int b = 0; b < nblocks; ++b) {
+        const auto& bsize = block_size[b];
+        if (bsize) {
+            centers[b] /= bsize;
+        }
+    }
+
+    variance = 0;
+
+    if (block_details.weighted) {
+        for (size_t r = 0; r < NR; ++r) {
+            auto curb = block[r];
+            auto delta = values[r] - centers[curb];
+            variance += delta * delta * block_details.per_element_weight[curb];
+        }
+    } else {
+        for (size_t r = 0; r < NR; ++r) {
+            auto curb = block[r];
+            auto delta = values[r] - centers[curb];
+            variance += delta * delta;
+        }
+    }
+
+    variance/= NR - 1;
+}
+
+
 template<class EigenMatrix_, typename Block_, class Index_, class EigenVector_>
-void compute_blockwise_mean_and_variance_eigen_dense(
+void compute_blockwise_mean_and_variance_realized_dense(
     const EigenMatrix_& emat, // this should be column-major with genes in the columns.
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details,
@@ -199,50 +248,102 @@ void compute_blockwise_mean_and_variance_eigen_dense(
         auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
 
         for (size_t c = start, end = start + length; c < end; ++c, ptr += NR, mptr += nblocks) {
-            std::fill(mptr, mptr + nblocks, 0);
-            for (size_t r = 0; r < NR; ++r) {
-                mptr[block[r]] += ptr[r];
-            }
-            for (int b = 0; b < nblocks; ++b) {
-                const auto& bsize = block_size[b];
-                if (bsize) {
-                    mptr[b] /= bsize;
-                }
-            }
-
-            auto& proxyvar = variances[c];
-            proxyvar = 0;
-
-            if (block_details.weighted) {
-                for (size_t r = 0; r < NR; ++r) {
-                    auto curb = block[r];
-                    auto delta = ptr[r] - mptr[curb];
-                    proxyvar += delta * delta * block_details.per_element_weight[curb];
-                }
-            } else {
-                for (size_t r = 0; r < NR; ++r) {
-                    auto curb = block[r];
-                    auto delta = ptr[r] - mptr[curb];
-                    proxyvar += delta * delta;
-                }
-            }
-
-            proxyvar /= NR - 1;
+            void compute_dense_mean_and_variance(NR, ptr, block, block_details, mptr, variances[c]);
         }
     }, emat.cols(), nthreads);
 }
 
-template<typename Index_, typename Value_, typename Block_, class EigenMatrix_, class EigenVector_>
+template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void compute_blockwise_mean_and_variance_tatami(
-    const tatami::Matrix<Index_, Value_>& emat, // this should have genes in the rows!
+    const tatami::Matrix<Value_, Index_>& mat, // this should have genes in the rows!
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details,
     EigenMatrix_& centers,
     EigenVector_& variances,
     int nthreads) 
 {
+    size_t nblocks = block_details.block_size.size();
+    Index_ NR = mat->nrow();
+    Index_ NC = mat->ncol();
 
+    if (mat->prefer_rows()) {
+        tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
+            auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
+            std::vector<Index_> block_copy(nblocks);
 
+            std::vector<Value_> vbuffer(NC);
+
+            if (mat->is_sparse()) {
+                std::vector<Index_> ibuffer(NC);
+                auto ext = tatami::consecutive_extractor<true>(mat, true, start, length);
+                for (Index_ r = start, end = start + length; r < end; ++r, mptr += nblocks) {
+                    auto range = ext->fetch(vbuffer.data(), ibuffer.data());
+                    compute_sparse_mean_and_variance(range.number, range.value, range.index, block, block_details, mptr, variances[r], block_copy);
+                }
+            } else {
+                auto ext = tatami::consecutive_extractor<false>(mat, true, start, length);
+                for (Index_ r = start, end = start + length; r < end; ++r, mptr += nblocks) {
+                    auto ptr = ext->fetch(vbuffer.data());
+                    compute_dense_mean_and_variance(NC, ptr, block, block_details, mptr, variances[r]);
+                }
+            }
+        }, NR, nthreads);
+
+    } else {
+        typedef typename EigenVector_::Scalar Scalar;
+
+        tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
+            std::vector<std::vector<Scalar_> > re_centers, re_variances;
+            re_centers.reserve(nblocks);
+            re_variances.reserve(nblocks);
+            for (size_t b = 0; b < nblocks; ++b) {
+                re_centers.emplace_back(length);
+                re_variances.emplace_back(length);
+            }
+
+            std::vector<Value_> vbuffer(length);
+
+            if (mat->is_sparse()) {
+                std::vector<tatami_stats::RunningSparse<Scalar_, Value_, Index_> > running;
+                running.reserve(nblocks);
+                for (size_t b = 0; b < nblocks; ++b) {
+                    running.emplace_back(re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false, /* subtract = */ start);
+                }
+
+                std::vector<Index_> ibuffer(length);
+                auto ext = tatami::consecutive_extractor<true>(mat, 0, NC, false, start, length);
+                for (Index_ c = 0; c < NC; ++c) {
+                    auto range = ext->fetch(vbuffer.data(), ibuffer.data());
+                    running[block[c]].add(range.value, range.index, range.number);
+                }
+
+            } else {
+                std::vector<tatami_stats::RunningDense<Scalar_, Value_, Index_> > running;
+                running.reserve(nblocks);
+                for (size_t b = 0; b < nblocks; ++b) {
+                    running.emplace_back(re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false);
+                }
+
+                auto ext = tatami::consecutive_extractor<false>(mat, 0, NC, false, start, length);
+                for (Index_ c = 0; c < NC; ++c) {
+                    auto ptr = ext->fetch(vbuffer.data());
+                    running[block[c]].add(ptr);
+                }
+            }
+
+            auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
+            for (Index_ r = 0; r < length; ++r, mptr += nblocks) {
+                for (size_t b = 0; b < nblocks; ++b) {
+                    mptr[b] = re_centers[b][r];
+                }
+                auto& my_var = variances[r + start];
+                for (size_t b = 0; b < nblocks; ++b) {
+                    my_var += re_variances[b][r];
+                }
+                my_var /= NC - 1;
+            }
+        }, NR, nthreads);
+    }
 }
 
 inline void project_sparse_matrix(const SparseMatrix& emat, Eigen::MatrixXd& pcs, const Eigen::MatrixXd& rotation, bool scale, const Eigen::VectorXd& scale_v, int nthreads) {
