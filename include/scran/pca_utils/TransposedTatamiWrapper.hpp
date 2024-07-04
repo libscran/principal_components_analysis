@@ -1,0 +1,171 @@
+#ifndef SCRAN_PCA_UTILS_TRANSPOSED_TATAMI_WRAPPER_HPP
+#define SCRAN_PCA_UTILS_TRANSPOSED_TATAMI_WRAPPER_HPP
+
+#include <vector>
+#include <type_traits>
+#include <algorithm>
+
+#include "tatami/tatami.hpp"
+#include "tatami_stats/tatami_stats.hpp"
+
+namespace scran {
+
+namespace pca_utils {
+
+template<class EigenVector_, typename Value_, typename Index_>
+class TransposedTatamiWrapper {
+public:
+    TransposedTatamiWrapper(const tatami::Matrix<Value_, Index_>* mat, int num_threads) : 
+        my_mat(mat), 
+        my_nrow(mat->nrow()),
+        my_ncol(mat->ncol()),
+        my_is_sparse(mat->is_sparse()),
+        my_prefer_rows(mat->prefer_rows()),
+        my_num_threads(num_threads)
+    {}
+
+    Eigen::Index rows() const {
+        return my_nrow;
+    }
+
+    Eigen::Index cols() const {
+        return my_ncol;
+    }
+
+private:
+    const tatami::Matrix<Value_, Index_>* my_mat;
+    Index_ my_nrow, my_ncol;
+    bool my_is_sparse;
+    bool my_prefer_rows;
+    int my_num_threads;
+    typedef typename EigenVector_::Scalar Scalar;
+
+public:
+    struct Workspace {
+        std::vector<std::vector<Value_> > vbuffers;
+        std::vector<std::vector<Index_> > ibuffers;
+        EigenVector_ holding;
+    };
+
+    Workspace workspace() const {
+        Workspace output;
+        // We can't be sure how the parallelization will cut up the jobs,
+        // so we'll just allocate the full extent of the preferred dimension.
+        Index_ full_extent = (my_prefer_rows ? my_mat->ncol() : my_mat->nrow());
+
+        output.vbuffers.reserve(my_num_threads);
+        for (int t = 0; t < my_num_threads; ++t) {
+            output.vbuffers.emplace_back(full_extent);
+        }
+
+        if (my_is_sparse) {
+            output.ibuffers.reserve(my_num_threads);
+            for (int t = 0; t < my_num_threads; ++t) {
+                output.ibuffers.emplace_back(full_extent);
+            }
+        }
+
+        return output;
+    }
+
+    typedef Workspace AdjointWorkspace;
+
+    AdjointWorkspace adjoint_workspace() const {
+        return workspace();
+    }
+
+private:
+    template<class Right_>
+    void inner_multiply(const Right_& rhs, bool transposed, Workspace& work, EigenVector_& out) const {
+        const auto& realized_rhs = [&]() {
+            if constexpr(std::is_same<Right_, EigenVector_>::value) {
+                return rhs;
+            } else {
+                work.holding = rhs;
+                return work.holding;
+            }
+        }();
+
+        auto resultdim = (transposed ? my_ncol : my_nrow);
+        auto otherdim = (transposed ? my_nrow : my_ncol);
+
+        tatami::parallelize([&](size_t t, Index_ start, Index_ length) {
+            auto& vbuffer = work.vbuffers[t];
+            auto& ibuffer = work.ibuffers[t];
+
+            if (my_prefer_rows != transposed) {
+                if (my_is_sparse) {
+                    auto ext = tatami::consecutive_extractor<true>(my_mat, my_prefer_rows, start, length);
+                    for (Index_ r = start, end = start + length; r < end; ++r) {
+                        auto range = ext->fetch(vbuffer.data(), ibuffer.data());
+                        Scalar prod = 0;
+                        for (Index_ i = 0; i < range.number; ++i) {
+                            prod += realized_rhs[range.index[i]] * range.value[i];
+                        }
+                        out[r] = prod;
+                    }
+
+                } else {
+                    auto ext = tatami::consecutive_extractor<false>(my_mat, my_prefer_rows, start, length);
+                    for (Index_ r = start, end = start + length; r < end; ++r) {
+                        auto ptr = ext->fetch(vbuffer.data());
+                        out[r] = std::inner_product(realized_rhs.begin(), realized_rhs.end(), ptr, static_cast<Scalar>(0));
+                    }
+                }
+
+            } else {
+                if (my_is_sparse) {
+                    auto ext = tatami::consecutive_extractor<true>(my_mat, my_prefer_rows, 0, otherdim, start, length);
+                    tatami_stats::LocalOutputBuffer<Scalar> buffer(t, start, length, out.data());
+                    auto bdata = buffer.data();
+                    for (Index_ c = 0; c < otherdim; ++c) {
+                        auto range = ext->fetch(vbuffer.data(), ibuffer.data());
+                        auto mult = realized_rhs[c];
+                        for (Index_ i = 0; i < range.number; ++i) {
+                            bdata[range.index[i]] += mult * range.value[i];
+                        }
+                    }
+                    buffer.transfer();
+
+                } else {
+                    auto ext = tatami::consecutive_extractor<false>(my_mat, my_prefer_rows, 0, otherdim, start, length);
+                    tatami_stats::LocalOutputBuffer<Scalar> buffer(t, start, length, out.data());
+                    auto bdata = buffer.data();
+                    for (Index_ c = 0; c < otherdim; ++c) {
+                        auto ptr = ext->fetch(vbuffer.data());
+                        auto mult = realized_rhs[c];
+                        for (Index_ r = 0; r < resultdim; ++r) {
+                            bdata[r] += mult * ptr[r];
+                        }
+                    }
+                    buffer.transfer();
+                }
+            }
+
+        }, resultdim, my_num_threads);
+    }
+
+public:
+    template<class Right_>
+    void multiply(const Right_& rhs, Workspace& work, EigenVector_& out) const {
+        return inner_multiply(rhs, true, work, out);
+    }
+
+    template<class Right_>
+    void adjoint_multiply(const Right_& rhs, Workspace& work, EigenVector_& out) const {
+        return inner_multiply(rhs, false, work, out);
+    }
+
+    template<class EigenMatrix_>
+    EigenMatrix_ realize() const {
+        EigenMatrix_ emat(my_ncol, my_nrow);
+        tatami::convert_to_dense(my_mat, !emat.IsRowMajor, emat.data(), my_num_threads);
+        return emat;
+    }
+};
+
+}
+
+}
+
+#endif
