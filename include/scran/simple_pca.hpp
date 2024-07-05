@@ -320,6 +320,8 @@ void dispatch(
 
 /**
  * @brief Container for the PCA results.
+ * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
+ * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  *
  * Instances should be constructed by the `compute()` function.
  */
@@ -368,17 +370,19 @@ struct Results {
 /**
  * Run PCA on an input gene-by-cell matrix.
  *
- * @tparam T Floating point type for the data.
- * @tparam IDX Integer type for the indices.
+ * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
+ * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
+ * @tparam Value_ Type of the matrix data.
+ * @tparam Index_ Integer type for the indices.
  *
  * @param[in] mat Pointer to the input matrix.
  * Columns should contain cells while rows should contain genes.
  * @param rank Number of PCs to compute.
  * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
- * otherwise, only the maximum number of PCs will be reported in the `Results`.
+ * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  *
- * @return A `Results` object containing the PCs and the variance explained.
+ * @return The results of the PCA on `mat`.
  */
 template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_ = double, typename Index_ = int>
 Results<EigenMatrix_, EigenVector_> compute(const tatami::Matrix<Value_, Index_>* mat, int rank, const Options& options) {

@@ -35,7 +35,7 @@ macro(create_test name)
     target_link_libraries(
         ${name}
         gtest_main
-        scran_principal_components_analysis
+        scran_principal_component_analysis
         scran_test_utils
     )
 
