@@ -24,12 +24,13 @@ public:
         my_num_threads(num_threads)
     {}
 
+public:
     Eigen::Index rows() const {
-        return my_nrow;
+        return my_ncol; // transposed, remember.
     }
 
     Eigen::Index cols() const {
-        return my_ncol;
+        return my_nrow;
     }
 
 private:
@@ -49,20 +50,9 @@ public:
 
     Workspace workspace() const {
         Workspace output;
-        // We can't be sure how the parallelization will cut up the jobs,
-        // so we'll just allocate the full extent of the preferred dimension.
-        Index_ full_extent = (my_prefer_rows ? my_mat->ncol() : my_mat->nrow());
-
-        output.vbuffers.reserve(my_num_threads);
-        for (int t = 0; t < my_num_threads; ++t) {
-            output.vbuffers.emplace_back(full_extent);
-        }
-
+        output.vbuffers.resize(my_num_threads);
         if (my_is_sparse) {
-            output.ibuffers.reserve(my_num_threads);
-            for (int t = 0; t < my_num_threads; ++t) {
-                output.ibuffers.emplace_back(full_extent);
-            }
+            output.ibuffers.resize(my_num_threads);
         }
 
         return output;
@@ -91,11 +81,15 @@ private:
 
         tatami::parallelize([&](size_t t, Index_ start, Index_ length) {
             auto& vbuffer = work.vbuffers[t];
-            auto& ibuffer = work.ibuffers[t];
 
             if (my_prefer_rows != transposed) {
+                vbuffer.resize(otherdim);
+
                 if (my_is_sparse) {
+                    auto& ibuffer = work.ibuffers[t];
+                    ibuffer.resize(otherdim);
                     auto ext = tatami::consecutive_extractor<true>(my_mat, my_prefer_rows, start, length);
+
                     for (Index_ r = start, end = start + length; r < end; ++r) {
                         auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                         Scalar prod = 0;
@@ -114,27 +108,31 @@ private:
                 }
 
             } else {
+                vbuffer.resize(length);
+
                 if (my_is_sparse) {
-                    auto ext = tatami::consecutive_extractor<true>(my_mat, my_prefer_rows, 0, otherdim, start, length);
+                    auto& ibuffer = work.ibuffers[t];
+                    ibuffer.resize(length);
+                    auto ext = tatami::consecutive_extractor<true>(my_mat, my_prefer_rows, static_cast<Index_>(0), otherdim, start, length);
                     tatami_stats::LocalOutputBuffer<Scalar> buffer(t, start, length, out.data());
                     auto bdata = buffer.data();
                     for (Index_ c = 0; c < otherdim; ++c) {
                         auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                         auto mult = realized_rhs[c];
                         for (Index_ i = 0; i < range.number; ++i) {
-                            bdata[range.index[i]] += mult * range.value[i];
+                            bdata[range.index[i] - start] += mult * range.value[i];
                         }
                     }
                     buffer.transfer();
 
                 } else {
-                    auto ext = tatami::consecutive_extractor<false>(my_mat, my_prefer_rows, 0, otherdim, start, length);
+                    auto ext = tatami::consecutive_extractor<false>(my_mat, my_prefer_rows, static_cast<Index_>(0), otherdim, start, length);
                     tatami_stats::LocalOutputBuffer<Scalar> buffer(t, start, length, out.data());
                     auto bdata = buffer.data();
                     for (Index_ c = 0; c < otherdim; ++c) {
                         auto ptr = ext->fetch(vbuffer.data());
                         auto mult = realized_rhs[c];
-                        for (Index_ r = 0; r < resultdim; ++r) {
+                        for (Index_ r = 0; r < length; ++r) {
                             bdata[r] += mult * ptr[r];
                         }
                     }
@@ -148,12 +146,12 @@ private:
 public:
     template<class Right_>
     void multiply(const Right_& rhs, Workspace& work, EigenVector_& out) const {
-        return inner_multiply(rhs, true, work, out);
+        inner_multiply(rhs, true, work, out); // mimicking a transposed matrix, remember!
     }
 
     template<class Right_>
     void adjoint_multiply(const Right_& rhs, Workspace& work, EigenVector_& out) const {
-        return inner_multiply(rhs, false, work, out);
+        inner_multiply(rhs, false, work, out);
     }
 
     template<class EigenMatrix_>

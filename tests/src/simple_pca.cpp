@@ -72,6 +72,12 @@ TEST_P(SimplePcaBasicTest, Test) {
 
         EXPECT_TRUE(ref.total_variance >= std::accumulate(ref.variance_explained.begin(), ref.variance_explained.end(), 0.0));
 
+        if (scale) {
+            EXPECT_EQ(ref.scale.size(), dense_row->nrow());
+        } else {
+            EXPECT_EQ(ref.scale.size(), 0);
+        }
+
     } else {
         // Results should be EXACTLY the same with parallelization.
         opt.num_threads = threads;
@@ -96,6 +102,28 @@ TEST_P(SimplePcaBasicTest, Test) {
     expect_equal_pcs(ref.components, res4.components);
     expect_equal_vectors(ref.variance_explained, res4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
+
+    // Checking that we get more-or-less the same results. 
+    opt.realize_matrix = false;
+    auto tres1 = scran::simple_pca::compute(dense_column.get(), rank, opt);
+    expect_equal_pcs(ref.components, tres1.components);
+    expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);
+
+    auto tres2 = scran::simple_pca::compute(dense_column.get(), rank, opt);
+    expect_equal_pcs(ref.components, tres2.components);
+    expect_equal_vectors(ref.variance_explained, tres2.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, tres2.total_variance);
+
+    auto tres3 = scran::simple_pca::compute(sparse_row.get(), rank, opt);
+    expect_equal_pcs(ref.components, tres3.components);
+    expect_equal_vectors(ref.variance_explained, tres3.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, tres3.total_variance);
+
+    auto tres4 = scran::simple_pca::compute(sparse_column.get(), rank, opt);
+    expect_equal_pcs(ref.components, tres4.components);
+    expect_equal_vectors(ref.variance_explained, tres4.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, tres4.total_variance);
 }
 
 INSTANTIATE_TEST_SUITE_P(
