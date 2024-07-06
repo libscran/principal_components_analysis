@@ -3,6 +3,7 @@
 
 #include "tatami/tatami.hpp"
 #include "irlba/irlba.hpp"
+#include "irlba/parallel.hpp"
 #include "Eigen/Dense"
 
 #include <vector>
@@ -10,6 +11,7 @@
 
 #include "pca_utils/general.hpp"
 #include "pca_utils/blocking.hpp"
+#include "pca_utils/TransposedTatamiWrapper.hpp"
 
 /**
  * @file residual_pca.hpp
@@ -44,7 +46,17 @@ namespace residual_pca {
 /**
  * @brief Options for `compute()`.
  */
-struct Defaults {
+struct Options {
+    /**
+     * @cond
+     */
+    Options() {
+        irlba_options.cap_number = true;
+    }
+    /**
+     * @endcond
+     */
+
     /**
      * Should genes be scaled to unit variance?
      * Genes with zero variance are ignored.
@@ -93,7 +105,8 @@ namespace internal {
 // This wrapper class mimics multiplication with the residuals,
 // i.e., after subtracting the per-block mean from each cell.
 template<class Matrix_, typename Block_, class EigenMatrix_, class EigenVector_>
-struct RegressWrapper {
+class RegressWrapper {
+public:
     RegressWrapper(const Matrix_& mat, const Block_* block, const EigenMatrix_& means) : my_mat(mat), my_block(block), my_means(means) {}
 
 public:
@@ -115,7 +128,7 @@ public:
     template<class Right_>
     void multiply(const Right_& rhs, Workspace& work, EigenVector_& output) const {
         const auto& realized_rhs = [&]() {
-            if constexpr(std::is_same<Right, EigenVector_>::value) {
+            if constexpr(std::is_same<Right_, EigenVector_>::value) {
                 return rhs;
             } else {
                 work.holding.noalias() = rhs;
@@ -128,7 +141,7 @@ public:
         work.sub.noalias() = my_means * realized_rhs;
         for (Eigen::Index i = 0, end = output.size(); i < end; ++i) {
             auto& val = output.coeffRef(i);
-            val -= work.sub.coeff(block[i]);
+            val -= work.sub.coeff(my_block[i]);
         }
     }
 
@@ -137,7 +150,7 @@ public:
         AdjointWorkspace(size_t nblocks, irlba::WrappedAdjointWorkspace<Matrix_> c) : aggr(nblocks), child(std::move(c)) {}
         EigenVector_ aggr;
         EigenVector_ holding;
-        irlba::WrappedWorkspace<Matrix_> child;
+        irlba::WrappedAdjointWorkspace<Matrix_> child;
     };
 
     AdjointWorkspace adjoint_workspace() const {
@@ -147,7 +160,7 @@ public:
     template<class Right_>
     void adjoint_multiply(const Right_& rhs, AdjointWorkspace& work, EigenVector_& output) const {
         const auto& realized_rhs = [&]() {
-            if constexpr(std::is_same<Right, EigenVector_>::value) {
+            if constexpr(std::is_same<Right_, EigenVector_>::value) {
                 return rhs;
             } else {
                 work.holding.noalias() = rhs;
@@ -168,33 +181,41 @@ public:
 public:
     template<class EigenMatrix2_>
     EigenMatrix2_ realize() const {
-        EigenMatrix2_ output = irlba::wrapped_realize<EigenMatrix2_>(mat);
+        EigenMatrix2_ output = irlba::wrapped_realize<EigenMatrix2_>(my_mat);
         for (Eigen::Index r = 0, rend = output.rows(); r < rend; ++r) {
-            output.row(r) -= my_means.row(block[r]);
+            output.row(r) -= my_means.row(my_block[r]);
         }
         return output;
     }
 
 private:
-    const Matrix_& mat;
-    const Block_* block;
-    const EigenMatrix_& means;
+    const Matrix_& my_mat;
+    const Block_* my_block;
+    const EigenMatrix_& my_means;
 };
 
-template<bool realize_matrix_, bool weight_, typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
+template<typename Block_, class EigenMatrix_>
+void subtract_centers_from_components(const Block_* block, EigenMatrix_& components, const EigenMatrix_& center_m, const EigenMatrix_& rotation) {
+    EigenMatrix_ centering = (center_m * rotation).adjoint();
+    for (size_t i = 0, iend = components.cols(); i < iend; ++i) {
+        components.col(i) -= centering.col(block[i]);
+    }
+}
+
+template<bool realize_matrix_, typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void run_sparse(
     const tatami::Matrix<Value_, Index_>* mat, 
     const Block_* block, 
-    const pca_utils::BlockingDetails& block_details, 
+    const pca_utils::BlockingDetails<Index_, EigenVector_>& block_details, 
     int rank,
     const Options& options,
-    EigenMatrix_& pcs, 
+    EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
     EigenMatrix_& center_m,
     EigenVector_& scale_v,
     typename EigenVector_::Scalar& total_var) 
-const {
+{
     auto ngenes = mat->nrow(), ncells = mat->ncol(); 
 
     auto emat = [&]() {
@@ -219,162 +240,209 @@ const {
                 options.num_threads
             ); 
         } else {
-            return pca_utils::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
-        }
-    }();
-
-    const auto& unwrapped = [&]() {
-        if constexpr(realize_matrix_) {
-            return emat;
-        } else {
-            return mat;
+            return pca_utils::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads);
         }
     }();
 
     auto nblocks = block_details.num_blocks();
     center_m.resize(nblocks, ngenes);
     scale_v.resize(ngenes);
-    pca_utils::compute_mean_and_variance_regress<weight_>(emat, block, block_details, center_m, scale_v, nthreads);
-    total_var = pca_utils::process_scale_vector(scale, scale_v);
+    if constexpr(realize_matrix_) {
+        pca_utils::compute_blockwise_mean_and_variance_realized_sparse(emat, block, block_details, center_m, scale_v, options.num_threads);
+    } else {
+        pca_utils::compute_blockwise_mean_and_variance_tatami(mat, block, block_details, center_m, scale_v, options.num_threads);
+    }
+    total_var = pca_utils::process_scale_vector(options.scale, scale_v);
 
     RegressWrapper<decltype(emat), Block_, EigenMatrix_, EigenVector_> centered(emat, block, center_m);
-    auto iopt = options.irlba_options;
-    iopt.cap_number = true;
 
-    if constexpr(weight) {
-        if (scale) {
+    if (block_details.weighted) {
+        if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
             irlba::Scaled<false, decltype(scaled), EigenVector_> weighted(scaled, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, rank, components, rotation, variance_explained, iopt);
+            irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
         } else {
-            pca_utils::Scaled<false, decltype(centered), EigenVector_> weighted(&centered, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, rank, components, rotation, variance_explained, iopt);
+            irlba::Scaled<false, decltype(centered), EigenVector_> weighted(centered, block_details.expanded_weights, /* divide = */ false);
+            irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
         }
 
-        // This transposes 'pcs' to be a NDIM * NCELLS matrix.
-        pca_utils::project_sparse_matrix(emat, pcs, rotation, scale, scale_v, nthreads);
+        EigenMatrix_ tmp;
+        const auto& scaled_rotation = pca_utils::scale_rotation_matrix(rotation, options.scale, scale_v, tmp);
+
+        // This transposes 'components' to be a NDIM * NCELLS matrix.
+        if constexpr(realize_matrix_) {
+            pca_utils::project_matrix_realized_sparse(emat, components, scaled_rotation, options.num_threads);
+        } else {
+            pca_utils::project_matrix_transposed_tatami(mat, components, scaled_rotation, options.num_threads);
+        }
 
         // Subtracting each block's mean from the PCs.
-        EigenMatrix_ centering;
-        if (scale) {
-            centering = (center_m * (rotation.array().colwise() / scale_v.array()).matrix()).adjoint();
-        } else {
-            centering = (center_m * rotation).adjoint();
-        }
-        for (size_t i = 0, iend = pcs.cols(); i < iend; ++i) {
-            pcs.col(i) -= centering.col(block[i]);
-        }
+        subtract_centers_from_components(block, components, center_m, scaled_rotation);
 
-        pca_utils::clean_up_projected<true>(pcs, variance_explained);
-        if (!transpose) {
-            pcs.adjointInPlace();
+        pca_utils::clean_up_projected(/* rows_are_dims = */ true, components, variance_explained);
+        if (!options.transpose) {
+            components.adjointInPlace();
         }
 
     } else {
-        if (scale) {
-            irlba::Scaled<decltype(centered)> scaled(&centered, &scale_v);
-            irb.run(scaled, pcs, rotation, variance_explained);
+        if (options.scale) {
+            irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
+            irlba::compute(scaled, rank, components, rotation, variance_explained, options.irlba_options);
         } else {
-            irb.run(centered, pcs, rotation, variance_explained);
+            irlba::compute(centered, rank, components, rotation, variance_explained, options.irlba_options);
         }
 
-        pca_utils::clean_up(mat->ncol(), pcs, variance_explained);
-        if (transpose) {
-            pcs.adjointInPlace();
+        pca_utils::clean_up(mat->ncol(), components, variance_explained);
+        if (options.transpose) {
+            components.adjointInPlace();
         }
     }
 }
 
-template<bool weight_, typename Data_, typename Index_, typename Block_>
+template<bool realize_matrix_, typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void run_dense(
-    const tatami::Matrix<Data_, Index_>* mat, 
+    const tatami::Matrix<Value_, Index_>* mat, 
     const Block_* block,
-    const pca_utils::BlockingDetails<weight_>& block_details, 
-    const irlba::Irlba& irb,
-    EigenMatrix_& pcs, 
+    const pca_utils::BlockingDetails<Index_, EigenVector_>& block_details, 
+    int rank,
+    const Options& options,
+    EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
     EigenMatrix_& center_m,
     EigenVector_& scale_v,
     double& total_var) 
-const {
-    auto emat = pca_utils::extract_dense_for_pca(mat, nthreads); // get a column-major matrix with genes in columns.
+{
+    Index_ ngenes = mat->nrow(), ncells = mat->ncol(); 
 
-    auto ngenes = emat.cols();
+    auto emat = [&]() {
+        if constexpr(realize_matrix_) {
+            // Perform an implicit transposition by performing a row-major extraction
+            // into a column-major transposed matrix.
+            EigenMatrix_ emat(ncells, ngenes); 
+            static_assert(!EigenMatrix_::IsRowMajor);
+            tatami::convert_to_dense(mat, /* row_major = */ true, emat.data(), options.num_threads);
+            return emat;
+        } else {
+            return pca_utils::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads);
+        }
+    }();
+
     auto nblocks = block_details.num_blocks();
     center_m.resize(nblocks, ngenes);
     scale_v.resize(ngenes);
-    pca_utils::compute_mean_and_variance_regress<weight_>(emat, block, block_details, center_m, scale_v, nthreads);
-    total_var = pca_utils::process_scale_vector(scale, scale_v);
+    if constexpr(realize_matrix_) {
+        pca_utils::compute_blockwise_mean_and_variance_realized_dense(emat, block, block_details, center_m, scale_v, options.num_threads);
+    } else {
+        pca_utils::compute_blockwise_mean_and_variance_tatami(mat, block, block_details, center_m, scale_v, options.num_threads);
+    }
+    total_var = pca_utils::process_scale_vector(options.scale, scale_v);
 
-    // Applying the centering and scaling directly so that we can run the PCA with no or fewer layers.
-    tatami::parallelize([&](size_t, size_t start, size_t length) -> void {
-        size_t ncells = emat.rows();
-        double* ptr = emat.data() + static_cast<size_t>(start) * ncells;
-        for (size_t g = start, end = start + length; g < end; ++g, ptr += ncells) {
-            for (size_t c = 0; c < ncells; ++c) {
-                ptr[c] -= center_m.coeff(block[c], g);
+    if constexpr(realize_matrix_) {
+        // Applying the centering and scaling directly so that we can run the PCA with no or fewer layers.
+        for (Index_ c = 0; c < ncells; ++c) {
+            emat.row(c) -= center_m.row(block[c]);
+        }
+        if (options.scale) {
+            emat.colwise().array() /= scale_v.array(); // process_scale_vector should already protect against division by zero.
+        }
+
+        if (block_details.weighted) {
+            irlba::Scaled<false, decltype(emat), EigenVector_> weighted(emat, block_details.expanded_weights, /* divide = */ false);
+            irlba::compute(weighted, components, rotation, variance_explained, options.irlba_options);
+            components.noalias() = emat * rotation;
+            pca_utils::clean_up_projected(/* rows_are_dims = */ false, components, variance_explained);
+        } else {
+            irlba::compute(emat, components, rotation, variance_explained, options.irlba_options);
+            pca_utils::clean_up(components.rows(), components, variance_explained);
+        }
+
+        if (options.transpose) {
+            components.adjointInPlace();
+        }
+
+    } else {
+        RegressWrapper<decltype(emat), Block_, EigenMatrix_, EigenVector_> centered(emat, block, center_m);
+
+        if (block_details.weighted) {
+            if (options.scale) {
+                irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
+                irlba::Scaled<false, decltype(scaled), EigenVector_> weighted(scaled, block_details.expanded_weights, /* divide = */ false);
+                irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
+            } else {
+                irlba::Scaled<false, decltype(centered), EigenVector_> weighted(centered, block_details.expanded_weights, /* divide = */ false);
+                irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
             }
 
-            if (scale) {
-                auto sd = scale_v[g];
-                for (size_t c = 0; c < ncells; ++c) {
-                    ptr[c] /= sd; // process_scale_vector should already protect against division by zero.
-                }
+            EigenMatrix_ tmp;
+            const auto& scaled_rotation = pca_utils::scale_rotation_matrix(rotation, options.scale, scale_v, tmp);
+
+            // This transposes 'components' to be a NDIM * NCELLS matrix.
+            if constexpr(realize_matrix_) {
+                components.noalias() = (emat * scaled_rotation).adjoint();
+            } else {
+                pca_utils::project_matrix_transposed_tatami(mat, components, scaled_rotation, options.num_threads);
+            }
+
+            // Subtracting each block's mean from the PCs.
+            subtract_centers_from_components(block, components, center_m, scaled_rotation);
+
+            pca_utils::clean_up_projected(/* rows_are_dims = */ true, components, variance_explained);
+            if (!options.transpose) {
+                components.adjointInPlace();
+            }
+
+        } else {
+            if (options.scale) {
+                irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
+                irlba::compute(scaled, rank, components, rotation, variance_explained, options.irlba_options);
+            } else {
+                irlba::compute(centered, rank, components, rotation, variance_explained, options.irlba_options);
+            }
+
+            pca_utils::clean_up(components.rows(), components, variance_explained);
+            if (options.transpose) {
+                components.adjointInPlace();
             }
         }
-    }, ngenes, nthreads);
-
-    if constexpr(weight_) {
-        pca_utils::SampleScaledWrapper<decltype(emat)> weighted(&emat, &(block_details.expanded_weights));
-        irb.run(weighted, pcs, rotation, variance_explained);
-        pcs.noalias() = emat * rotation;
-        pca_utils::clean_up_projected<false>(pcs, variance_explained);
-    } else {
-        irb.run(emat, pcs, rotation, variance_explained);
-        pca_utils::clean_up(pcs.rows(), pcs, variance_explained);
-    }
-
-    if (transpose) {
-        pcs.adjointInPlace();
     }
 }
 
-template<typename Data_, typename Index_, typename Block_>
+template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void dispatch(
-    const tatami::Matrix<Data_, Index_>* mat, 
+    const tatami::Matrix<Value_, Index_>* mat, 
     const Block_* block,
-    EigenMatrix_& pcs, 
+    int rank,
+    const Options& options,
+    EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
     EigenMatrix_& center_m,
     EigenVector_& scale_v,
     double& total_var) 
-const {
-    irlba::EigenThreadScope t(nthreads);
-    irlba::Irlba irb;
-    irb.set_number(rank);
-    irb.set_cap_number(true);
+{
+    irlba::EigenThreadScope t(options.num_threads);
+    auto bdetails = pca_utils::compute_blocking_details<EigenVector_>(mat->ncol(), block, options.block_weight_policy, options.variable_block_weight_parameters);
 
-    if (block_weight_policy == WeightPolicy::NONE) {
-        auto bdetails = pca_utils::compute_blocking_details(mat->ncol(), block);
-        if (mat->sparse()) {
-            run_sparse<false>(mat, block, bdetails, irb, pcs, rotation, variance_explained, center_m, scale_v, total_var);
+    if (mat->sparse()) {
+        if (options.realize_matrix) {
+            run_sparse<true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         } else {
-            run_dense<false>(mat, block, bdetails, irb, pcs, rotation, variance_explained, center_m, scale_v, total_var);
+            run_sparse<false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
-
     } else {
-        auto bdetails = pca_utils::compute_blocking_details(mat->ncol(), block, block_weight_policy, variable_block_weight_parameters);
-        if (mat->sparse()) {
-            run_sparse<true>(mat, block, bdetails, irb, pcs, rotation, variance_explained, center_m, scale_v, total_var);
+        if (options.realize_matrix) {
+            run_dense<true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         } else {
-            run_dense<true>(mat, block, bdetails, irb, pcs, rotation, variance_explained, center_m, scale_v, total_var);
+            run_dense<false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
     }
 }
 
 }
+/**
+ * @endcond
+ */
 
 /**
  * @brief Results of the PCA on the residuals.
@@ -441,11 +509,13 @@ struct Results {
  *
  * @return A `Results` object containing the PCs and the variance explained.
  */
-template<typename Data_, typename Index_, typename Block_>
-Results compute(const tatami::Matrix<Data_, Index_>* mat, const Block_* block) const {
-    Results output;
-    internal::dispatch(mat, block, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
+Results<EigenMatrix_, EigenVector_> compute(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const Options& options) {
+    Results<EigenMatrix_, EigenVector_> output;
+    internal::dispatch(mat, block, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
     return output;
+}
+
 }
 
 }

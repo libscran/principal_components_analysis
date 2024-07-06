@@ -24,7 +24,14 @@ FetchContent_Declare(
   GIT_TAG 3.4.0
 )
 
+FetchContent_Declare(
+  scran_core_utils
+  GIT_REPOSITORY https://github.com/libscran/core_utils
+  GIT_TAG master
+)
+
 FetchContent_MakeAvailable(tatami)
 FetchContent_MakeAvailable(tatami_stats)
 FetchContent_MakeAvailable(irlba)
 FetchContent_MakeAvailable(eigen)
+FetchContent_MakeAvailable(scran_core_utils)

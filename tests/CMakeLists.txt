@@ -30,6 +30,7 @@ macro(create_test name)
     add_executable(
         ${name} 
         src/simple_pca.cpp
+        src/residual_pca.cpp
     )
 
     target_link_libraries(
