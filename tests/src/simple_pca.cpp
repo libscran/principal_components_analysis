@@ -105,7 +105,7 @@ TEST_P(SimplePcaBasicTest, Test) {
 
     // Checking that we get more-or-less the same results. 
     opt.realize_matrix = false;
-    auto tres1 = scran::simple_pca::compute(dense_column.get(), rank, opt);
+    auto tres1 = scran::simple_pca::compute(dense_row.get(), rank, opt);
     expect_equal_pcs(ref.components, tres1.components);
     expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);

@@ -353,7 +353,7 @@ struct Results {
     typename EigenVector_::Scalar total_variance = 0;
 
     /**
-     * Rotation matrix, only returned if `Options::return_rotation = true`.
+     * Rotation matrix. 
      * Each row corresponds to a feature while each column corresponds to a PC.
      * The number of PCs is determined by the `rank` used in `compute()`.
      */
