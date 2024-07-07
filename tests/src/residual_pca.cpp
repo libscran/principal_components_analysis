@@ -242,7 +242,7 @@ TEST_P(ResidualPcaBasicTest, BasicConsistency) {
 
     // Checking that we get more-or-less the same results. 
     opts.realize_matrix = false;
-    auto tres1 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    auto tres1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres1.components);
     expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);
@@ -326,7 +326,7 @@ TEST_P(ResidualPcaBasicTest, WeightedConsistency) {
 
     // Checking that we get more-or-less the same results. 
     opts.realize_matrix = false;
-    auto tres1 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    auto tres1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres1.components);
     expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);
@@ -463,11 +463,13 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
         blocking.insert(blocking.end(), nc, b);
     }
 
-    scran::residual_pca::Options opt;
-    opt.scale = scale;
-    opt.block_weight_policy = scran::block_weights::Policy::NONE;
     auto combined = tatami::make_DelayedBind(components, false);
-    auto ref = scran::residual_pca::compute(combined.get(), blocking.data(), rank, opt);
+    auto ref = scran::residual_pca::compute(combined.get(), blocking.data(), rank, [&]{
+        scran::residual_pca::Options opt;
+        opt.scale = scale;
+        opt.block_weight_policy = scran::block_weights::Policy::NONE;
+        return opt;
+    }());
 
     // Some adjustment is required to adjust for the global scaling.
     ref.components.array() /= ref.components.norm();
@@ -476,6 +478,8 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
     {
         // Checking that we get more-or-less the same results with equiweighting
         // when all blocks are of the same size.
+        scran::residual_pca::Options opt;
+        opt.scale = scale;
         opt.num_threads = nthreads;
         opt.block_weight_policy = scran::block_weights::Policy::EQUAL;
 
