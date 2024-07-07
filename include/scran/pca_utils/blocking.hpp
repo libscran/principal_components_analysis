@@ -458,7 +458,7 @@ inline void project_matrix_realized_sparse(
 template<typename Value_, typename Index_, class EigenMatrix_>
 inline void project_matrix_transposed_tatami(
     const tatami::Matrix<Value_, Index_>* mat, // genes in rows, cells in columns
-    EigenMatrix_& components, // dims in rows, cells in columns
+    EigenMatrix_& components,
     const EigenMatrix_& scaled_rotation, // genes in rows, dims in columns
     int nthreads) 
 {
@@ -486,11 +486,10 @@ inline void project_matrix_transposed_tatami(
                 for (Index_ g = 0; g < ngenes; ++g) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                     for (size_t r = 0; r < rank; ++r) {
-                        auto mult = vptr[r + static_cast<size_t>(ngenes) + static_cast<size_t>(g)]; // cast to avoid overflow.
+                        auto mult = vptr[r * static_cast<size_t>(ngenes) + static_cast<size_t>(g)]; // cast to avoid overflow.
                         auto& local_buffer = local_buffers[r];
                         for (Index_ i = 0; i < range.number; ++i) {
-                            auto c = range.index[i];
-                            local_buffer[c] += range.value[i] * mult;
+                            local_buffer[range.index[i] - start] += range.value[i] * mult;
                         }
                     }
                 }
@@ -500,7 +499,7 @@ inline void project_matrix_transposed_tatami(
                 for (Index_ g = 0; g < ngenes; ++g) {
                     auto ptr = ext->fetch(vbuffer.data());
                     for (size_t r = 0; r < rank; ++r) {
-                        auto mult = vptr[r + static_cast<size_t>(ngenes) + static_cast<size_t>(g)]; // cast to avoid overflow.
+                        auto mult = vptr[r * static_cast<size_t>(ngenes) + static_cast<size_t>(g)]; // cast to avoid overflow.
                         auto& local_buffer = local_buffers[r];
                         for (Index_ c = 0; c < length; ++c) {
                             local_buffer[c] += ptr[c] * mult;
@@ -533,6 +532,7 @@ inline void project_matrix_transposed_tatami(
                     auto vptr = scaled_rotation.data();
                     for (size_t v = 0; v < rank; ++v, vptr += ngenes) {
                         auto& output = optr[v];
+                        output = 0;
                         for (Index_ i = 0; i < range.number; ++i) {
                             output += vptr[range.index[i]] * range.value[i];
                         }

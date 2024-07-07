@@ -453,58 +453,64 @@ struct Results {
     /**
      * Matrix of principal components.
      * By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix.
-     * If `set_transpose()` is set to `false`, rows are cells instead.
-     * The number of PCs is determined by `set_rank()`.
+     * If `Options::transpose = false`, rows are cells instead.
+     * The number of PCs is determined by the `rank` used in `compute()`.
      */
     EigenMatrix_ components;
 
     /**
      * Variance explained by each PC.
-     * Each entry corresponds to a column in `pcs` and is in decreasing order.
+     * Each entry corresponds to a column in `components` and is in decreasing order.
      */
     EigenVector_ variance_explained;
 
     /**
-     * Total variance of the dataset (possibly after scaling, if `set_scale()` is set to `true`).
+     * Total variance of the dataset (possibly after scaling, if `Options::scale = true`).
      * This can be used to divide `variance_explained` to obtain the percentage of variance explained.
      */
     typename EigenVector_::Scalar total_variance = 0;
 
     /**
-     * Rotation matrix, only returned if `ResidualPca::set_return_rotation()` is `true`.
-     * Each row corresponds to a feature while each column corresponds to a PC.
-     * The number of PCs is determined by `set_rank()`.
+     * Rotation matrix.
+     * Each row corresponds to a gene while each column corresponds to a PC.
+     * The number of PCs is determined by the `rank` used in `compute()`.
      */
     EigenMatrix_ rotation;
 
     /**
-     * Centering matrix, only returned if `ResidualPca::set_return_center()` is `true`.
-     * Each row corresponds to a row in the input matrix and each column corresponds to a block, 
-     * such that each entry contains the mean for a particular feature in the corresponding block.
+     * Centering matrix.
+     * Each row corresponds to a block and each column corresponds to a gene.
+     * Each entry contains the mean for a particular gene in the corresponding block.
      */
     EigenMatrix_ center;
 
     /**
-     * Scaling vector, only returned if `ResidualPca::set_return_center()` is `true`.
-     * Each entry corresponds to a row in the input matrix and contains the scaling factor used to divide the feature values if `ResidualPca::set_scale()` is `true`.
-     * If feature filtering was performed, the length is equal to the number of features remaining after filtering.
+     * Scaling vector, only returned if `Options::scale = true`.
+     * Each entry corresponds to a row in the input matrix and contains the scaling factor used to divide that gene's values if `Options::scale = true`.
      */
     EigenVector_ scale;
 };
 
 /**
- * Run the blocked PCA on an input gene-by-cell matrix.
+ * Run PCA on the residuals after regressing out a blocking factor from the rows of a gene-by-cell matrix.
  *
- * @tparam Data_ Floating point type for the data.
+ * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
+ * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
+ * @tparam Value_ Type of the matrix data.
  * @tparam Index_ Integer type for the indices.
  * @tparam Block_ Integer type for the blocking factor.
  *
  * @param[in] mat Pointer to the input matrix.
  * Columns should contain cells while rows should contain genes.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
- * containing the block assignment for each cell - see `count_blocks()` for details.
+ * containing the block assignment for each cell. 
+ * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
+ * @param rank Number of PCs to compute.
+ * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
+ * otherwise, only the maximum number of PCs will be reported in the results.
+ * @param options Further options.
  *
- * @return A `Results` object containing the PCs and the variance explained.
+ * @return The results of the PCA on the residuals. 
  */
 template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_ = double, typename Index_ = int, typename Block_ = int>
 Results<EigenMatrix_, EigenVector_> compute(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const Options& options) {
