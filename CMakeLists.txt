@@ -10,7 +10,7 @@ target_compile_features(scran_principal_component_analysis INTERFACE cxx_std_17)
 target_include_directories(scran_principal_component_analysis INTERFACE include/scran)
 
 add_subdirectory(extern)
-target_link_libraries(scran_principal_component_analysis INTERFACE tatami::tatami tatami::tatami_stats ltla::irlba Eigen3::Eigen)
+target_link_libraries(scran_principal_component_analysis INTERFACE scran_core_utils tatami::tatami tatami::tatami_stats ltla::irlba Eigen3::Eigen)
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)
