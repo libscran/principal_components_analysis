@@ -216,9 +216,9 @@ void run_sparse(
     EigenVector_& scale_v,
     typename EigenVector_::Scalar& total_var) 
 {
-    auto ngenes = mat->nrow(), ncells = mat->ncol(); 
+    Index_ ngenes = mat->nrow(), ncells = mat->ncol(); 
 
-    auto emat = [&]() {
+    auto emat = [&]{
         if constexpr(realize_matrix_) {
             // 'extracted' contains row-major contents...
             auto extracted = tatami::retrieve_compressed_sparse_contents<Value_, Index_>(
@@ -229,8 +229,7 @@ void run_sparse(
             );
 
             // But we effectively transpose it to CSC with genes in columns.
-            Index_ ncells = mat->ncol();
-            irlba::ParallelSparseMatrix emat(
+            return irlba::ParallelSparseMatrix(
                 ncells,
                 ngenes,
                 std::move(extracted.value),
@@ -244,7 +243,7 @@ void run_sparse(
         }
     }();
 
-    auto nblocks = block_details.num_blocks();
+    auto nblocks = block_details.block_size.size();
     center_m.resize(nblocks, ngenes);
     scale_v.resize(ngenes);
     if constexpr(realize_matrix_) {
@@ -328,7 +327,7 @@ void run_dense(
         }
     }();
 
-    auto nblocks = block_details.num_blocks();
+    auto nblocks = block_details.block_size.size();
     center_m.resize(nblocks, ngenes);
     scale_v.resize(ngenes);
     if constexpr(realize_matrix_) {
@@ -344,16 +343,16 @@ void run_dense(
             emat.row(c) -= center_m.row(block[c]);
         }
         if (options.scale) {
-            emat.colwise().array() /= scale_v.array(); // process_scale_vector should already protect against division by zero.
+            emat.array().rowwise() /= scale_v.adjoint().array(); // process_scale_vector should already protect against division by zero.
         }
 
         if (block_details.weighted) {
             irlba::Scaled<false, decltype(emat), EigenVector_> weighted(emat, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, components, rotation, variance_explained, options.irlba_options);
+            irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
             components.noalias() = emat * rotation;
             pca_utils::clean_up_projected(/* rows_are_dims = */ false, components, variance_explained);
         } else {
-            irlba::compute(emat, components, rotation, variance_explained, options.irlba_options);
+            irlba::compute(emat, rank, components, rotation, variance_explained, options.irlba_options);
             pca_utils::clean_up(components.rows(), components, variance_explained);
         }
 
@@ -475,7 +474,6 @@ struct Results {
      * Rotation matrix, only returned if `ResidualPca::set_return_rotation()` is `true`.
      * Each row corresponds to a feature while each column corresponds to a PC.
      * The number of PCs is determined by `set_rank()`.
-     * If feature filtering was performed, the number of rows is equal to the number of features remaining after filtering.
      */
     EigenMatrix_ rotation;
 
@@ -483,7 +481,6 @@ struct Results {
      * Centering matrix, only returned if `ResidualPca::set_return_center()` is `true`.
      * Each row corresponds to a row in the input matrix and each column corresponds to a block, 
      * such that each entry contains the mean for a particular feature in the corresponding block.
-     * If feature filtering was performed, the number of rows is equal to the number of features remaining after filtering.
      */
     EigenMatrix_ center;
 
@@ -509,7 +506,7 @@ struct Results {
  *
  * @return A `Results` object containing the PCs and the variance explained.
  */
-template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
+template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_ = double, typename Index_ = int, typename Block_ = int>
 Results<EigenMatrix_, EigenVector_> compute(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const Options& options) {
     Results<EigenMatrix_, EigenVector_> output;
     internal::dispatch(mat, block, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);

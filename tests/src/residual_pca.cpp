@@ -2,6 +2,7 @@
 
 #include "compare_pcs.h"
 #include "utils.h"
+#include "simulate_vector.h"
 
 #include "tatami/tatami.hpp"
 
@@ -145,180 +146,173 @@ TEST(RegressWrapperTest, CustomSparse) {
     }
 }
 
-///******************************************/
-//
-//class ResidualPcaTestCore {
-//protected:
-//    std::shared_ptr<tatami::NumericMatrix> dense_row;
-//
-//    template<class Param>
-//    void assemble(const Param& param) {
-//        scale = std::get<0>(param);
-//        rank = std::get<1>(param);
-//        nblocks = std::get<2>(param);
-//
-//        size_t nr = 121, nc = 155;
-//        Simulator sim;
-//        sim.seed = nr * nc + scale + rank * nblocks;
-//        auto mat = sim.matrix(nr, nc);
-//        dense_row.reset(new decltype(mat)(std::move(mat)));
-//        return;
-//    }
-//
-//    bool scale;
-//    int rank;
-//    int nblocks;
-//};
-//
-///******************************************/
-//
-//class ResidualPcaBasicTest : public ::testing::TestWithParam<std::tuple<bool, int, int, int> >, public ResidualPcaTestCore {
-//protected:
-//    std::shared_ptr<tatami::NumericMatrix> dense_column, sparse_row, sparse_column;
-//
-//    template<class Param>
-//    void extra_assemble(const Param& param) {
-//        assemble(param);
-//        dense_column = tatami::convert_to_dense(dense_row.get(), 1);
-//        sparse_row = tatami::convert_to_sparse(dense_row.get(), 0);
-//        sparse_column = tatami::convert_to_sparse(dense_row.get(), 1);
-//    }
-//};
-//
-//TEST_P(ResidualPcaBasicTest, BasicConsistency) {
-//    auto param = GetParam();
-//    extra_assemble(param);
-//    int nthreads = std::get<3>(param);
-//
-//    scran::ResidualPca runner;
-//    runner.set_scale(scale).set_rank(rank);
-//    runner.set_block_weight_policy(scran::WeightPolicy::NONE);
-//    auto block = generate_blocks(dense_row->ncol(), nblocks);
-//    auto ref = runner.run(dense_row.get(), block.data());
-//
-//    if (nthreads == 1) {
-//        EXPECT_EQ(ref.pcs.rows(), rank);
-//        EXPECT_EQ(ref.pcs.cols(), dense_row->ncol());
-//        EXPECT_EQ(ref.variance_explained.size(), rank);
-//
-//        are_pcs_centered(ref.pcs);
-//        EXPECT_TRUE(ref.total_variance >= std::accumulate(ref.variance_explained.begin(), ref.variance_explained.end(), 0.0));
-//
-//        // Total variance makes sense. Remember, this doesn't consider the
-//        // loss of d.f. from calculation of the block means.
-//        if (scale) {
-//            EXPECT_FLOAT_EQ(dense_row->nrow(), ref.total_variance);
-//        } else {
-//            auto collected = fragment_matrices_by_block(dense_row, block, nblocks);
-//
-//            double total_var = 0;
-//            for (int b = 0, end = collected.size(); b < end; ++b) {
-//                const auto& sub = collected[b];
-//                auto vars = tatami::row_variances(sub.get());
-//                total_var += std::accumulate(vars.begin(), vars.end(), 0.0) * (sub->ncol() - 1);
-//            }
-//
-//            EXPECT_FLOAT_EQ(total_var / (dense_row->ncol() - 1), ref.total_variance);
-//        }
-//
-//    } else {
-//        runner.set_num_threads(nthreads);
-//
-//        // Results should be EXACTLY the same with parallelization.
-//        auto res1 = runner.run(dense_row.get(), block.data());
-//        EXPECT_EQ(ref.pcs, res1.pcs);
-//        EXPECT_EQ(ref.variance_explained, res1.variance_explained);
-//        EXPECT_EQ(ref.total_variance, res1.total_variance);
-//    }
-//
-//    // Checking that we get more-or-less the same results. 
-//    auto res2 = runner.run(dense_column.get(), block.data());
-//    expect_equal_pcs(ref.pcs, res2.pcs);
-//    expect_equal_vectors(ref.variance_explained, res2.variance_explained);
-//    EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
-//
-//    auto res3 = runner.run(sparse_row.get(), block.data());
-//    expect_equal_pcs(ref.pcs, res3.pcs);
-//    expect_equal_vectors(ref.variance_explained, res3.variance_explained);
-//    EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
-//
-//    auto res4 = runner.run(sparse_column.get(), block.data());
-//    expect_equal_pcs(ref.pcs, res4.pcs);
-//    expect_equal_vectors(ref.variance_explained, res4.variance_explained);
-//    EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
-//}
-//
-//TEST_P(ResidualPcaBasicTest, WeightedConsistency) {
-//    auto param = GetParam();
-//    extra_assemble(param);
-//    int nthreads = std::get<3>(param);
-//
-//    scran::ResidualPca runner;
-//    runner.set_scale(scale).set_rank(rank);
-//    runner.set_block_weight_policy(scran::WeightPolicy::EQUAL);
-//
-//    auto block = generate_blocks(dense_row->ncol(), nblocks);
-//    auto ref = runner.run(dense_row.get(), block.data());
-//
-//    if (nthreads == 1) {
-//        are_pcs_centered(ref.pcs);
-//        EXPECT_TRUE(ref.total_variance >= std::accumulate(ref.variance_explained.begin(), ref.variance_explained.end(), 0.0));
-//
-//        if (scale) {
-//            EXPECT_FLOAT_EQ(dense_row->nrow(), ref.total_variance);
-//        } else {
-//            auto collected = fragment_matrices_by_block(dense_row, block, nblocks);
-//
-//            // Here, the 'variance' is really just the grand sum (across blocks) of
-//            // the sum (across cells) of the squared difference from the mean.
-//            double total_var = 0;
-//            for (int b = 0, end = collected.size(); b < end; ++b) {
-//                const auto& sub = collected[b];
-//                auto vars = tatami::row_variances(sub.get());
-//                total_var += std::accumulate(vars.begin(), vars.end(), 0.0) * (sub->ncol() - 1) / sub->ncol();
-//            }
-//
-//            EXPECT_FLOAT_EQ(total_var / (dense_row->ncol() - 1), ref.total_variance);
-//        }
-//
-//    } else {
-//        runner.set_num_threads(nthreads);
-//
-//        // Results should be EXACTLY the same with parallelization.
-//        auto res1 = runner.run(dense_row.get(), block.data());
-//        EXPECT_EQ(ref.pcs, res1.pcs);
-//        EXPECT_EQ(ref.variance_explained, res1.variance_explained);
-//        EXPECT_EQ(ref.total_variance, res1.total_variance);
-//    }
-//
-//    // Checking that we get more-or-less the same results. 
-//    auto res2 = runner.run(dense_column.get(), block.data());
-//    expect_equal_pcs(ref.pcs, res2.pcs);
-//    expect_equal_vectors(ref.variance_explained, res2.variance_explained);
-//    EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
-//
-//    auto res3 = runner.run(sparse_row.get(), block.data());
-//    expect_equal_pcs(ref.pcs, res3.pcs);
-//    expect_equal_vectors(ref.variance_explained, res3.variance_explained);
-//    EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
-//
-//    auto res4 = runner.run(sparse_column.get(), block.data());
-//    expect_equal_pcs(ref.pcs, res4.pcs);
-//    expect_equal_vectors(ref.variance_explained, res4.variance_explained);
-//    EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
-//}
-//
-//INSTANTIATE_TEST_SUITE_P(
-//    ResidualPca,
-//    ResidualPcaBasicTest,
-//    ::testing::Combine(
-//        ::testing::Values(false, true), // to scale or not to scale?
-//        ::testing::Values(2, 3, 4), // number of PCs to obtain
-//        ::testing::Values(1, 2, 3), // number of blocks
-//        ::testing::Values(1, 3) // number of threads
-//    )
-//);
-//
+/******************************************/
+
+class ResidualPcaTestCore {
+protected:
+    inline static std::shared_ptr<tatami::NumericMatrix> dense_row;
+
+    static void assemble() {
+        size_t nr = 121, nc = 155;
+        auto vec = simulate_sparse_vector<double>(nr * nc, 0.1, /* lower = */ -10, /* upper = */ 10, /* seed = */ 123456);
+        dense_row.reset(new tatami::DenseRowMatrix<double, int>(nr, nc, std::move(vec)));
+        return;
+    }
+};
+
+/******************************************/
+
+class ResidualPcaBasicTest : public ::testing::TestWithParam<std::tuple<bool, int, int, int> >, public ResidualPcaTestCore {
+protected:
+    inline static std::shared_ptr<tatami::NumericMatrix> dense_column, sparse_row, sparse_column;
+
+    static void SetUpTestSuite() {
+        assemble();
+        dense_column = tatami::convert_to_dense(dense_row.get(), false);
+        sparse_row = tatami::convert_to_compressed_sparse(dense_row.get(), true);
+        sparse_column = tatami::convert_to_compressed_sparse(dense_row.get(), false);
+    }
+};
+
+TEST_P(ResidualPcaBasicTest, BasicConsistency) {
+    auto param = GetParam();
+    bool scale = std::get<0>(param);
+    int rank = std::get<1>(param);
+    int nblocks = std::get<2>(param);
+    int nthreads = std::get<3>(param);
+
+    auto block = generate_blocks(dense_row->ncol(), nblocks);
+
+    scran::residual_pca::Options opts;
+    opts.scale = scale;
+    opts.block_weight_policy = scran::block_weights::Policy::NONE;
+    auto ref = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+
+    if (nthreads == 1) {
+        EXPECT_EQ(ref.components.rows(), rank);
+        EXPECT_EQ(ref.components.cols(), dense_row->ncol());
+        EXPECT_EQ(ref.variance_explained.size(), rank);
+
+        are_pcs_centered(ref.components);
+        EXPECT_TRUE(ref.total_variance >= std::accumulate(ref.variance_explained.begin(), ref.variance_explained.end(), 0.0));
+
+        // Total variance makes sense. Remember, this doesn't consider the
+        // loss of d.f. from calculation of the block means.
+        if (scale) {
+            EXPECT_FLOAT_EQ(dense_row->nrow(), ref.total_variance);
+        } else {
+            auto collected = fragment_matrices_by_block(dense_row, block, nblocks);
+
+            double total_var = 0;
+            for (int b = 0, end = collected.size(); b < end; ++b) {
+                const auto& sub = collected[b];
+                auto vars = tatami_stats::variances::by_row(sub.get());
+                total_var += std::accumulate(vars.begin(), vars.end(), 0.0) * (sub->ncol() - 1);
+            }
+
+            EXPECT_FLOAT_EQ(total_var / (dense_row->ncol() - 1), ref.total_variance);
+        }
+
+    } else {
+        opts.num_threads = nthreads;
+        auto res1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+
+        // Results should be EXACTLY the same with parallelization.
+        EXPECT_EQ(ref.components, res1.components);
+        EXPECT_EQ(ref.variance_explained, res1.variance_explained);
+        EXPECT_EQ(ref.total_variance, res1.total_variance);
+    }
+
+    // Checking that we get more-or-less the same results. 
+    auto res2 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    expect_equal_pcs(ref.components, res2.components);
+    expect_equal_vectors(ref.variance_explained, res2.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
+
+    auto res3 = scran::residual_pca::compute(sparse_row.get(), block.data(), rank, opts);
+    expect_equal_pcs(ref.components, res3.components);
+    expect_equal_vectors(ref.variance_explained, res3.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
+
+    auto res4 = scran::residual_pca::compute(sparse_column.get(), block.data(), rank, opts);
+    expect_equal_pcs(ref.components, res4.components);
+    expect_equal_vectors(ref.variance_explained, res4.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
+}
+
+TEST_P(ResidualPcaBasicTest, WeightedConsistency) {
+    auto param = GetParam();
+    bool scale = std::get<0>(param);
+    int rank = std::get<1>(param);
+    int nblocks = std::get<2>(param);
+    int nthreads = std::get<3>(param);
+
+    scran::residual_pca::Options opts;
+    opts.scale = scale;
+    opts.block_weight_policy = scran::block_weights::Policy::EQUAL;
+
+    auto block = generate_blocks(dense_row->ncol(), nblocks);
+    auto ref = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+
+    if (nthreads == 1) {
+        are_pcs_centered(ref.components);
+        EXPECT_TRUE(ref.total_variance >= std::accumulate(ref.variance_explained.begin(), ref.variance_explained.end(), 0.0));
+
+        if (scale) {
+            EXPECT_FLOAT_EQ(dense_row->nrow(), ref.total_variance);
+        } else {
+            auto collected = fragment_matrices_by_block(dense_row, block, nblocks);
+
+            // Here, the 'variance' is really just the grand sum (across blocks) of
+            // the sum (across cells) of the squared difference from the mean.
+            double total_var = 0;
+            for (int b = 0, end = collected.size(); b < end; ++b) {
+                const auto& sub = collected[b];
+                auto vars = tatami_stats::variances::by_row(sub.get());
+                total_var += std::accumulate(vars.begin(), vars.end(), 0.0) * (sub->ncol() - 1) / sub->ncol();
+            }
+
+            EXPECT_FLOAT_EQ(total_var / (dense_row->ncol() - 1), ref.total_variance);
+        }
+
+    } else {
+        opts.num_threads = nthreads;
+        auto res1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+
+        // Results should be EXACTLY the same with parallelization.
+        EXPECT_EQ(ref.components, res1.components);
+        EXPECT_EQ(ref.variance_explained, res1.variance_explained);
+        EXPECT_EQ(ref.total_variance, res1.total_variance);
+    }
+
+    // Checking that we get more-or-less the same results. 
+    auto res2 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    expect_equal_pcs(ref.components, res2.components);
+    expect_equal_vectors(ref.variance_explained, res2.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
+
+    auto res3 = scran::residual_pca::compute(sparse_row.get(), block.data(), rank, opts);
+    expect_equal_pcs(ref.components, res3.components);
+    expect_equal_vectors(ref.variance_explained, res3.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
+
+    auto res4 = scran::residual_pca::compute(sparse_column.get(), block.data(), rank, opts);
+    expect_equal_pcs(ref.components, res4.components);
+    expect_equal_vectors(ref.variance_explained, res4.variance_explained);
+    EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ResidualPca,
+    ResidualPcaBasicTest,
+    ::testing::Combine(
+        ::testing::Values(false, true), // to scale or not to scale?
+        ::testing::Values(2, 3, 4), // number of PCs to obtain
+        ::testing::Values(1, 2, 3), // number of blocks
+        ::testing::Values(1, 3) // number of threads
+    )
+);
+
 ///******************************************/
 //
 //class ResidualPcaMoreTest : public ::testing::TestWithParam<std::tuple<bool, int, int> >, public ResidualPcaTestCore {};

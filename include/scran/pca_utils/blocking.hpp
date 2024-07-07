@@ -56,7 +56,7 @@ BlockingDetails<Index_, EigenVector_> compute_blocking_details(
         if (block_size) {
             typename EigenVector_::Scalar block_weight = 1;
             if (block_weight_policy == block_weights::Policy::VARIABLE) {
-                block_weight = variable_block_weight(block_size, variable_block_weight_parameters);
+                block_weight = block_weights::compute_variable(block_size, variable_block_weight_parameters);
             }
 
             element_weight[i] = block_weight / block_size;
@@ -79,7 +79,7 @@ BlockingDetails<Index_, EigenVector_> compute_blocking_details(
 
     auto& expanded = output.expanded_weights;
     expanded.resize(ncells);
-    for (size_t i = 0; i < ncells; ++i) {
+    for (Index_ i = 0; i < ncells; ++i) {
         expanded.coeffRef(i) = sqrt_weights[block[i]];
     }
 
@@ -212,7 +212,7 @@ void compute_dense_mean_and_variance(
     for (Num_ r = 0; r < number; ++r) {
         centers[block[r]] += values[r];
     }
-    for (int b = 0; b < nblocks; ++b) {
+    for (size_t b = 0; b < nblocks; ++b) {
         const auto& bsize = block_size[b];
         if (bsize) {
             centers[b] /= bsize;
@@ -264,7 +264,7 @@ void compute_blockwise_mean_and_variance_realized_dense(
 
 template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void compute_blockwise_mean_and_variance_tatami(
-    const tatami::Matrix<Value_, Index_>& mat, // this should have genes in the rows!
+    const tatami::Matrix<Value_, Index_>* mat, // this should have genes in the rows!
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details,
     EigenMatrix_& centers,
@@ -331,11 +331,11 @@ void compute_blockwise_mean_and_variance_tatami(
                 std::vector<tatami_stats::variances::RunningSparse<Scalar, Value_, Index_> > running;
                 running.reserve(nblocks);
                 for (size_t b = 0; b < nblocks; ++b) {
-                    running.emplace_back(re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false, /* subtract = */ start);
+                    running.emplace_back(length, re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false, /* subtract = */ start);
                 }
 
                 std::vector<Index_> ibuffer(length);
-                auto ext = tatami::consecutive_extractor<true>(mat, static_cast<Index_>(0), ncells, false, start, length);
+                auto ext = tatami::consecutive_extractor<true>(mat, false, static_cast<Index_>(0), ncells, start, length);
                 for (Index_ c = 0; c < ncells; ++c) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                     running[block[c]].add(range.value, range.index, range.number);
@@ -349,10 +349,10 @@ void compute_blockwise_mean_and_variance_tatami(
                 std::vector<tatami_stats::variances::RunningDense<Scalar, Value_, Index_> > running;
                 running.reserve(nblocks);
                 for (size_t b = 0; b < nblocks; ++b) {
-                    running.emplace_back(re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false);
+                    running.emplace_back(length, re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false);
                 }
 
-                auto ext = tatami::consecutive_extractor<false>(mat, static_cast<Index_>(0), ncells, false, start, length);
+                auto ext = tatami::consecutive_extractor<false>(mat, false, static_cast<Index_>(0), ncells, start, length);
                 for (Index_ c = 0; c < ncells; ++c) {
                     auto ptr = ext->fetch(vbuffer.data());
                     running[block[c]].add(ptr);
@@ -395,12 +395,11 @@ const EigenMatrix_& scale_rotation_matrix(const EigenMatrix_& rotation, bool sca
     }
 }
 
-template<class IrlbaSparseMatrix_, typename Block_, class EigenMatrix_, class EigenVector_>
+template<class IrlbaSparseMatrix_, class EigenMatrix_>
 inline void project_matrix_realized_sparse(
-    const IrlbaSparseMatrix_& emat,
-    const Block_* block, 
-    EigenMatrix_& components, 
-    const EigenMatrix_& scaled_rotation, 
+    const IrlbaSparseMatrix_& emat, // cell in rows, genes in the columns, CSC.
+    EigenMatrix_& components, // dims in rows, cells in columns
+    const EigenMatrix_& scaled_rotation, // genes in rows, dims in columns
     int nthreads) 
 {
     size_t rank = scaled_rotation.cols();
@@ -431,7 +430,7 @@ inline void project_matrix_realized_sparse(
 #ifdef _OPENMP
         #pragma omp parallel for num_threads(nthreads)
 #endif
-        for (size_t t = 0; t < nthreads; ++t) {
+        for (int t = 0; t < nthreads; ++t) {
 #else
         IRLBA_CUSTOM_PARALLEL(nthreads, [&](size_t t) -> void { 
 #endif
@@ -456,14 +455,11 @@ inline void project_matrix_realized_sparse(
     }
 }
 
-template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
+template<typename Value_, typename Index_, class EigenMatrix_>
 inline void project_matrix_transposed_tatami(
-    const tatami::Matrix<Value_, Index_>* mat,
-    const Block_* block, 
-    EigenMatrix_& components, 
-    const EigenMatrix_& scaled_rotation, 
-    bool scale, 
-    const EigenVector_& scale_v, 
+    const tatami::Matrix<Value_, Index_>* mat, // genes in rows, cells in columns
+    EigenMatrix_& components, // dims in rows, cells in columns
+    const EigenMatrix_& scaled_rotation, // genes in rows, dims in columns
     int nthreads) 
 {
     size_t rank = scaled_rotation.cols();
@@ -473,7 +469,7 @@ inline void project_matrix_transposed_tatami(
     components.resize(rank, ncells); // used a transposed version for more cache efficiency.
 
     if (mat->prefer_rows()) {
-        tatami::parallelize([&](size_t t, Index_ start, Index_ length) -> void {
+        tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
             static_assert(!EigenMatrix_::IsRowMajor);
             auto vptr = scaled_rotation.data();
             std::vector<Value_> vbuffer(length);
@@ -486,7 +482,7 @@ inline void project_matrix_transposed_tatami(
 
             if (mat->is_sparse()) {
                 std::vector<Index_> ibuffer(length);
-                auto ext = tatami::consecutive_extractor<true>(mat, 0, ngenes, false, start, length);
+                auto ext = tatami::consecutive_extractor<true>(mat, true, static_cast<Index_>(0), ngenes, start, length);
                 for (Index_ g = 0; g < ngenes; ++g) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                     for (size_t r = 0; r < rank; ++r) {
@@ -500,7 +496,7 @@ inline void project_matrix_transposed_tatami(
                 }
 
             } else {
-                auto ext = tatami::consecutive_extractor<false>(mat, 0, ngenes, false, start, length);
+                auto ext = tatami::consecutive_extractor<false>(mat, true, static_cast<Index_>(0), ngenes, start, length);
                 for (Index_ g = 0; g < ngenes; ++g) {
                     auto ptr = ext->fetch(vbuffer.data());
                     for (size_t r = 0; r < rank; ++r) {
