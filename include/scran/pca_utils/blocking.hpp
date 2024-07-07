@@ -34,32 +34,32 @@ BlockingDetails<Index_, EigenVector_> compute_blocking_details(
     block_weights::Policy block_weight_policy, 
     const block_weights::VariableParameters& variable_block_weight_parameters) 
 {
-    auto bsizes = tatami_stats::tabulate_groups(block, ncells);
     BlockingDetails<Index_, EigenVector_> output;
-    output.block_size.swap(bsizes);
-
+    output.block_size = tatami_stats::tabulate_groups(block, ncells);
     if (block_weight_policy == block_weights::Policy::NONE) {
         return output;
     }
 
-    size_t nblocks = bsizes.size();
+    const auto& block_size = output.block_size;
+    size_t nblocks = block_size.size();
     output.weighted = true;
     auto& total_weight = output.total_block_weight;
     auto& element_weight = output.per_element_weight;
+    element_weight.resize(nblocks);
 
     for (size_t i = 0; i < nblocks; ++i) {
-        auto block_size = output.block_size[i];
+        auto bsize = block_size[i];
 
         // Computing effective block weights that also incorporate division by the
         // block size. This avoids having to do the division by block size in the
-        // 'compute_mean_and_variance_regress()' function.
-        if (block_size) {
+        // 'compute_blockwise_mean_and_variance*()' functions.
+        if (bsize) {
             typename EigenVector_::Scalar block_weight = 1;
             if (block_weight_policy == block_weights::Policy::VARIABLE) {
-                block_weight = block_weights::compute_variable(block_size, variable_block_weight_parameters);
+                block_weight = block_weights::compute_variable(bsize, variable_block_weight_parameters);
             }
 
-            element_weight[i] = block_weight / block_size;
+            element_weight[i] = block_weight / bsize;
             total_weight += block_weight;
         } else {
             element_weight[i] = 0;
