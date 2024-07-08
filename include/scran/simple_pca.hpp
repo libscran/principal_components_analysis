@@ -10,8 +10,7 @@
 #include <vector>
 #include <cmath>
 
-#include "pca_utils/general.hpp"
-#include "pca_utils/TransposedTatamiWrapper.hpp"
+#include "pca_utils.hpp"
 
 /**
  * @file simple_pca.hpp

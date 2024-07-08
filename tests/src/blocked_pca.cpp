@@ -6,10 +6,10 @@
 
 #include "tatami/tatami.hpp"
 
-#include "residual_pca.hpp"
+#include "blocked_pca.hpp"
 #include "simple_pca.hpp"
 
-TEST(RegressWrapperTest, EigenDense) {
+TEST(ResidualWrapperTest, EigenDense) {
     size_t NR = 30, NC = 10, NB = 3;
     auto block = generate_blocks(NR, NB);
 
@@ -29,7 +29,7 @@ TEST(RegressWrapperTest, EigenDense) {
         }
     }
 
-    scran::residual_pca::internal::RegressWrapper<decltype(thing), int, Eigen::MatrixXd, Eigen::VectorXd> blocked(thing, block.data(), centers);
+    scran::blocked_pca::internal::ResidualWrapper<decltype(thing), int, Eigen::MatrixXd, Eigen::VectorXd> blocked(thing, block.data(), centers);
     auto realized = blocked.template realize<Eigen::MatrixXd>();
 
     // Trying in the normal orientation.
@@ -63,7 +63,7 @@ TEST(RegressWrapperTest, EigenDense) {
     }
 }
 
-TEST(RegressWrapperTest, CustomSparse) {
+TEST(ResidualWrapperTest, CustomSparse) {
     size_t NR = 30, NC = 10, NB = 3;
     auto block = generate_blocks(NR, NB);
 
@@ -101,12 +101,12 @@ TEST(RegressWrapperTest, CustomSparse) {
     }
 
     irlba::ParallelSparseMatrix thing(NR, NC, std::move(values), std::move(indices), std::move(ptrs), /* column_major = */ true, 1);
-    scran::residual_pca::internal::RegressWrapper<decltype(thing), int, Eigen::MatrixXd, Eigen::VectorXd> blocked(thing, block.data(), centers);
+    scran::blocked_pca::internal::ResidualWrapper<decltype(thing), int, Eigen::MatrixXd, Eigen::VectorXd> blocked(thing, block.data(), centers);
     auto realized = blocked.template realize<Eigen::MatrixXd>();
 
     // Checking that the dense reference matches up.
     {
-        scran::residual_pca::internal::RegressWrapper<decltype(thing), int, Eigen::MatrixXd, Eigen::VectorXd> blockedref(thing, block.data(), centers);
+        scran::blocked_pca::internal::ResidualWrapper<decltype(thing), int, Eigen::MatrixXd, Eigen::VectorXd> blockedref(thing, block.data(), centers);
         auto realizedref = blockedref.template realize<Eigen::MatrixXd>();
 
         for (Eigen::Index i = 0; i < realizedref.cols(); ++i) {
@@ -149,7 +149,7 @@ TEST(RegressWrapperTest, CustomSparse) {
 
 /******************************************/
 
-class ResidualPcaTestCore {
+class BlockedPcaTestCore {
 protected:
     inline static std::shared_ptr<tatami::NumericMatrix> dense_row;
 
@@ -163,7 +163,7 @@ protected:
 
 /******************************************/
 
-class ResidualPcaBasicTest : public ::testing::TestWithParam<std::tuple<bool, int, int, int> >, public ResidualPcaTestCore {
+class BlockedPcaBasicTest : public ::testing::TestWithParam<std::tuple<bool, bool, int, int, int> >, public BlockedPcaTestCore {
 protected:
     inline static std::shared_ptr<tatami::NumericMatrix> dense_column, sparse_row, sparse_column;
 
@@ -175,19 +175,21 @@ protected:
     }
 };
 
-TEST_P(ResidualPcaBasicTest, BasicConsistency) {
+TEST_P(BlockedPcaBasicTest, BasicConsistency) {
     auto param = GetParam();
     bool scale = std::get<0>(param);
-    int rank = std::get<1>(param);
-    int nblocks = std::get<2>(param);
-    int nthreads = std::get<3>(param);
+    bool use_resids = std::get<1>(param);
+    int rank = std::get<2>(param);
+    int nblocks = std::get<3>(param);
+    int nthreads = std::get<4>(param);
 
     auto block = generate_blocks(dense_row->ncol(), nblocks);
 
-    scran::residual_pca::Options opts;
+    scran::blocked_pca::Options opts;
     opts.scale = scale;
+    opts.components_from_residuals = use_resids;
     opts.block_weight_policy = scran::block_weights::Policy::NONE;
-    auto ref = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+    auto ref = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opts);
 
     if (nthreads == 1) {
         EXPECT_EQ(ref.components.rows(), rank);
@@ -216,7 +218,7 @@ TEST_P(ResidualPcaBasicTest, BasicConsistency) {
 
     } else {
         opts.num_threads = nthreads;
-        auto res1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+        auto res1 = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opts);
 
         // Results should be EXACTLY the same with parallelization.
         EXPECT_EQ(ref.components, res1.components);
@@ -225,57 +227,59 @@ TEST_P(ResidualPcaBasicTest, BasicConsistency) {
     }
 
     // Checking that we get more-or-less the same results. 
-    auto res2 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    auto res2 = scran::blocked_pca::compute(dense_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, res2.components);
     expect_equal_vectors(ref.variance_explained, res2.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
 
-    auto res3 = scran::residual_pca::compute(sparse_row.get(), block.data(), rank, opts);
+    auto res3 = scran::blocked_pca::compute(sparse_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, res3.components);
     expect_equal_vectors(ref.variance_explained, res3.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
 
-    auto res4 = scran::residual_pca::compute(sparse_column.get(), block.data(), rank, opts);
+    auto res4 = scran::blocked_pca::compute(sparse_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, res4.components);
     expect_equal_vectors(ref.variance_explained, res4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
 
     // Checking that we get more-or-less the same results. 
     opts.realize_matrix = false;
-    auto tres1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+    auto tres1 = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres1.components);
     expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);
 
-    auto tres2 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    auto tres2 = scran::blocked_pca::compute(dense_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres2.components);
     expect_equal_vectors(ref.variance_explained, tres2.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres2.total_variance);
 
-    auto tres3 = scran::residual_pca::compute(sparse_row.get(), block.data(), rank, opts);
+    auto tres3 = scran::blocked_pca::compute(sparse_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres3.components);
     expect_equal_vectors(ref.variance_explained, tres3.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres3.total_variance);
 
-    auto tres4 = scran::residual_pca::compute(sparse_column.get(), block.data(), rank, opts);
+    auto tres4 = scran::blocked_pca::compute(sparse_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres4.components);
     expect_equal_vectors(ref.variance_explained, tres4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres4.total_variance);
 }
 
-TEST_P(ResidualPcaBasicTest, WeightedConsistency) {
+TEST_P(BlockedPcaBasicTest, WeightedConsistency) {
     auto param = GetParam();
     bool scale = std::get<0>(param);
-    int rank = std::get<1>(param);
-    int nblocks = std::get<2>(param);
-    int nthreads = std::get<3>(param);
-
-    scran::residual_pca::Options opts;
-    opts.scale = scale;
-    opts.block_weight_policy = scran::block_weights::Policy::EQUAL;
+    bool use_resids = std::get<1>(param);
+    int rank = std::get<2>(param);
+    int nblocks = std::get<3>(param);
+    int nthreads = std::get<4>(param);
 
     auto block = generate_blocks(dense_row->ncol(), nblocks);
-    auto ref = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+
+    scran::blocked_pca::Options opts;
+    opts.scale = scale;
+    opts.components_from_residuals = use_resids;
+    opts.block_weight_policy = scran::block_weights::Policy::EQUAL;
+    auto ref = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opts);
 
     if (nthreads == 1) {
         are_pcs_centered(ref.components);
@@ -300,7 +304,7 @@ TEST_P(ResidualPcaBasicTest, WeightedConsistency) {
 
     } else {
         opts.num_threads = nthreads;
-        auto res1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+        auto res1 = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opts);
 
         // Results should be EXACTLY the same with parallelization.
         EXPECT_EQ(ref.components, res1.components);
@@ -309,50 +313,51 @@ TEST_P(ResidualPcaBasicTest, WeightedConsistency) {
     }
 
     // Checking that we get more-or-less the same results. 
-    auto res2 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    auto res2 = scran::blocked_pca::compute(dense_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, res2.components);
     expect_equal_vectors(ref.variance_explained, res2.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
 
-    auto res3 = scran::residual_pca::compute(sparse_row.get(), block.data(), rank, opts);
+    auto res3 = scran::blocked_pca::compute(sparse_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, res3.components);
     expect_equal_vectors(ref.variance_explained, res3.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
 
-    auto res4 = scran::residual_pca::compute(sparse_column.get(), block.data(), rank, opts);
+    auto res4 = scran::blocked_pca::compute(sparse_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, res4.components);
     expect_equal_vectors(ref.variance_explained, res4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
 
     // Checking that we get more-or-less the same results. 
     opts.realize_matrix = false;
-    auto tres1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opts);
+    auto tres1 = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres1.components);
     expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);
 
-    auto tres2 = scran::residual_pca::compute(dense_column.get(), block.data(), rank, opts);
+    auto tres2 = scran::blocked_pca::compute(dense_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres2.components);
     expect_equal_vectors(ref.variance_explained, tres2.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres2.total_variance);
 
-    auto tres3 = scran::residual_pca::compute(sparse_row.get(), block.data(), rank, opts);
+    auto tres3 = scran::blocked_pca::compute(sparse_row.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres3.components);
     expect_equal_vectors(ref.variance_explained, tres3.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres3.total_variance);
 
-    auto tres4 = scran::residual_pca::compute(sparse_column.get(), block.data(), rank, opts);
+    auto tres4 = scran::blocked_pca::compute(sparse_column.get(), block.data(), rank, opts);
     expect_equal_pcs(ref.components, tres4.components);
     expect_equal_vectors(ref.variance_explained, tres4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres4.total_variance);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ResidualPca,
-    ResidualPcaBasicTest,
+    BlockedPca,
+    BlockedPcaBasicTest,
     ::testing::Combine(
         ::testing::Values(false, true), // to scale or not to scale?
-        ::testing::Values(5, 10, 20), // number of PCs to obtain
+        ::testing::Values(false, true), // to compute PCs from the residuals?
+        ::testing::Values(2, 5, 10), // number of PCs to obtain
         ::testing::Values(1, 2, 3), // number of blocks
         ::testing::Values(1, 3) // number of threads
     )
@@ -360,24 +365,26 @@ INSTANTIATE_TEST_SUITE_P(
 
 /******************************************/
 
-class ResidualPcaMoreTest : public ::testing::TestWithParam<std::tuple<bool, int, int> >, public ResidualPcaTestCore {
+class BlockedPcaMoreTest : public ::testing::TestWithParam<std::tuple<bool, bool, int, int> >, public BlockedPcaTestCore {
 protected:
     static void SetUpTestSuite() {
         assemble();
     }
 };
 
-TEST_P(ResidualPcaMoreTest, VersusSimple) {
+TEST_P(BlockedPcaMoreTest, VersusSimple) {
     auto param = GetParam();
     bool scale = std::get<0>(param);
-    int rank = std::get<1>(param);
-    int nblocks = std::get<2>(param);
+    bool use_resids = std::get<1>(param);
+    int rank = std::get<2>(param);
+    int nblocks = std::get<3>(param);
     auto block = generate_blocks(dense_row->ncol(), nblocks);
 
-    scran::residual_pca::Options opt;
+    scran::blocked_pca::Options opt;
     opt.scale = scale;
+    opt.components_from_residuals = use_resids;
     opt.block_weight_policy = scran::block_weights::Policy::NONE;
-    auto res1 = scran::residual_pca::compute(dense_row.get(), block.data(), rank, opt);
+    auto res1 = scran::blocked_pca::compute(dense_row.get(), block.data(), rank, opt);
 
     scran::simple_pca::Options refopt;
     refopt.scale = scale;
@@ -427,32 +434,53 @@ TEST_P(ResidualPcaMoreTest, VersusSimple) {
         tatami::DenseColumnMatrix<double, int> refmat(nr, nc, std::move(regressed));
         auto res2 = scran::simple_pca::compute(&refmat, rank, refopt);
 
-        expect_equal_pcs(res1.components, res2.components);
+        expect_equal_rotation(res1.rotation, res2.rotation);
         expect_equal_vectors(res1.variance_explained, res2.variance_explained);
         EXPECT_FLOAT_EQ(res1.total_variance, res2.total_variance);
+
+        if (use_resids) {
+            expect_equal_pcs(res1.components, res2.components);
+        } else {
+            are_pcs_centered(res1.components);
+
+            Eigen::MatrixXd payload(nc, nr);
+            tatami::convert_to_dense(dense_row.get(), true, payload.data());
+
+            Eigen::MatrixXd rotation = res2.rotation;
+            if (scale) {
+                rotation.array().colwise() /= res2.scale.array();
+            }
+
+            Eigen::MatrixXd expected = (payload * rotation).adjoint();
+            Eigen::VectorXd means = expected.array().rowwise().sum() / nc;
+            expected.colwise() -= means;
+            expect_equal_pcs(res1.components, expected);
+        }
     }
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ResidualPca,
-    ResidualPcaMoreTest,
+    BlockedPca,
+    BlockedPcaMoreTest,
     ::testing::Combine(
         ::testing::Values(false, true), // to scale or not to scale?
-        ::testing::Values(5, 10, 20), // number of PCs to obtain
+        ::testing::Values(false, true), // to compute PCs from the residuals?
+        ::testing::Values(2, 5, 10), // number of PCs to obtain
         ::testing::Values(1, 2, 3) // number of blocks
     )
 );
 
 /******************************************/
 
-class ResidualPcaWeightedTest : public ::testing::TestWithParam<std::tuple<bool, int, int, int> > {};
+class BlockedPcaWeightedTest : public ::testing::TestWithParam<std::tuple<bool, bool, int, int, int> > {};
 
-TEST_P(ResidualPcaWeightedTest, VersusReference) {
+TEST_P(BlockedPcaWeightedTest, VersusReference) {
     auto param = GetParam();
     bool scale = std::get<0>(param);
-    int rank = std::get<1>(param);
-    int nblocks = std::get<2>(param);
-    int nthreads = std::get<3>(param);
+    bool use_resids = std::get<1>(param);
+    int rank = std::get<2>(param);
+    int nblocks = std::get<3>(param);
+    int nthreads = std::get<4>(param);
 
     std::vector<std::shared_ptr<tatami::NumericMatrix> > components;
     std::vector<int> blocking;
@@ -463,10 +491,15 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
         blocking.insert(blocking.end(), nc, b);
     }
 
+    scran::blocked_pca::Options base_opt;
+    base_opt.scale = scale;
+    base_opt.components_from_residuals = use_resids;
+    base_opt.num_threads = nthreads;
+
     auto combined = tatami::make_DelayedBind(components, false);
-    auto ref = scran::residual_pca::compute(combined.get(), blocking.data(), rank, [&]{
-        scran::residual_pca::Options opt;
-        opt.scale = scale;
+    auto ref = scran::blocked_pca::compute(combined.get(), blocking.data(), rank, [&]{
+        auto opt = base_opt;
+        opt.num_threads = 1; // using a single thread for a consistent reference.
         opt.block_weight_policy = scran::block_weights::Policy::NONE;
         return opt;
     }());
@@ -478,12 +511,10 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
     {
         // Checking that we get more-or-less the same results with equiweighting
         // when all blocks are of the same size.
-        scran::residual_pca::Options opt;
-        opt.scale = scale;
-        opt.num_threads = nthreads;
+        auto opt = base_opt;
         opt.block_weight_policy = scran::block_weights::Policy::EQUAL;
 
-        auto res1 = scran::residual_pca::compute(combined.get(), blocking.data(), rank, opt);
+        auto res1 = scran::blocked_pca::compute(combined.get(), blocking.data(), rank, opt);
         res1.components.array() /= res1.components.norm();
         expect_equal_pcs(ref.components, res1.components);
 
@@ -504,15 +535,13 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
     // With a large size cap, each block is weighted by its size,
     // which is equivalent to the total absence of re-weighting.
     {
-        scran::residual_pca::Options opt;
-        opt.scale = scale;
-        opt.num_threads = nthreads;
+        auto opt = base_opt;
         opt.block_weight_policy = scran::block_weights::Policy::VARIABLE;
         opt.variable_block_weight_parameters.upper_bound = 1000000;
-        auto res2 = scran::residual_pca::compute(expanded.get(), expanded_block.data(), rank, opt);
+        auto res2 = scran::blocked_pca::compute(expanded.get(), expanded_block.data(), rank, opt);
 
         opt.block_weight_policy = scran::block_weights::Policy::NONE;
-        auto ref2 = scran::residual_pca::compute(expanded.get(), expanded_block.data(), rank, opt);
+        auto ref2 = scran::blocked_pca::compute(expanded.get(), expanded_block.data(), rank, opt);
 
         ref2.components.array() /= ref2.components.norm();
         res2.components.array() /= res2.components.norm();
@@ -527,12 +556,10 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
     // despite the imbalance. This should give us the same coordinates as
     // when the PCA was performed with batches of equal size. 
     {
-        scran::residual_pca::Options opt;
-        opt.scale = scale;
-        opt.num_threads = nthreads;
+        auto opt = base_opt;
         opt.block_weight_policy = scran::block_weights::Policy::VARIABLE;
         opt.variable_block_weight_parameters.upper_bound = 0;
-        auto res2 = scran::residual_pca::compute(expanded.get(), expanded_block.data(), rank, opt);
+        auto res2 = scran::blocked_pca::compute(expanded.get(), expanded_block.data(), rank, opt);
 
         // Mocking up the expected results.
         Eigen::MatrixXd expanded_pcs(rank, expanded->ncol());
@@ -564,11 +591,12 @@ TEST_P(ResidualPcaWeightedTest, VersusReference) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ResidualPca,
-    ResidualPcaWeightedTest,
+    BlockedPca,
+    BlockedPcaWeightedTest,
     ::testing::Combine(
         ::testing::Values(false, true), // to scale or not to scale?
-        ::testing::Values(5, 10, 20), // number of PCs to obtain
+        ::testing::Values(false, true), // to compute PCs from the residuals?
+        ::testing::Values(2, 5, 10), // number of PCs to obtain
         ::testing::Values(2, 3), // number of blocks
         ::testing::Values(1, 3) // number of threads
     )
