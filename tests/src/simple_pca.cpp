@@ -131,7 +131,7 @@ INSTANTIATE_TEST_SUITE_P(
     SimplePcaBasicTest,
     ::testing::Combine(
         ::testing::Values(false, true), // to scale or not to scale?
-        ::testing::Values(5, 10, 20), // number of PCs to obtain
+        ::testing::Values(2, 5, 10), // number of PCs to obtain
         ::testing::Values(1, 3) // number of threads
     )
 );
@@ -191,6 +191,6 @@ INSTANTIATE_TEST_SUITE_P(
     SimplePcaMoreTest,
     ::testing::Combine(
         ::testing::Values(false, true), // to scale or not to scale?
-        ::testing::Values(2, 3, 4) // number of PCs to obtain
+        ::testing::Values(2, 5, 10) // number of PCs to obtain
     )
 );
