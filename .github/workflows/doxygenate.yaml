@@ -1,0 +1,45 @@
+on:
+  push:
+    branches:
+      - master
+
+name: Build documentation
+
+jobs:
+  doxygenator:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Add Pretty CSS
+      uses: wei/wget@v1
+      with:
+        args: -O docs/doxygen-awesome.css https://raw.githubusercontent.com/jothepro/doxygen-awesome-css/main/doxygen-awesome.css
+
+    - name: Download tatami tagfile
+      uses: wei/wget@v1
+      with:
+        args: -O docs/tatami.tag https://tatami-inc.github.io/tatami/tatami.tag
+
+    - name: Download irlba tagfile
+      uses: wei/wget@v1
+      with:
+        args: -O docs/irlba.tag https://ltla.github.io/CppIrlba/irlba.tag
+
+    - name: Download core_utils tagfile
+      uses: wei/wget@v1
+      with:
+        args: -O docs/scran_core_utils.tag https://libscran.github.io/core_utils/scran_core_utils.tag
+
+    - name: Doxygen Action
+      uses: mattnotmitt/doxygen-action@v1
+      with:
+        working-directory: docs/
+
+    - name: GH Pages Deployment
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        branch: gh-pages # The branch the action should deploy to.
+        folder: docs/html
+        target-folder: docs/
+        clean: true # Automatically remove deleted files from the deploy branch

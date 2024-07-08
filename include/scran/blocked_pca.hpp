@@ -32,13 +32,14 @@ namespace scran {
  * This yields the same results as the naive calculation of residuals but is much faster as it can take advantage of efficient sparse operations.
  *
  * By default, the principal components are computed from the (conceptual) matrix of residuals.
- * Under some conditions, this yields a low-dimensional space where all inter-block differences have been removed -
- * namely, when all blocks have the same composition and the inter-block differences are consistent for all cell subpopulations.
- * If these conditions hold, we could use these components for downstream analysis without any concern for blocking effects.
- * In practice, these conditions are not usually met, requiring more sophisticated batch correction methods like [MNN correction](https://github.com/LTLA/CppMnnCorrect).
- * This is facilitated by setting `Options::components_from_residuals = false`, in which case only the rotation vectors are computed from the residuals.
- * The original expression values for each cell is projected onto the associated subspace to obtain PC coordinates that can be used for further batch correction.
- * This aims to preserve the benefits of blocking to focus on intra-block biology instead of inter-block differences,
+ * This yields a low-dimensional space where all inter-block differences have been removed,
+ * assuming that all blocks have the same composition and the inter-block differences are consistent for all cell subpopulations.
+ * Under these assumptions, we could use these components for downstream analysis without any concern for block-wise effects.
+ * In practice, these assumptions do not hold and more sophisticated batch correction methods like [MNN correction](https://github.com/LTLA/CppMnnCorrect) are required.
+ * Some of these methods accept a low-dimensional embedding of cells as input, which can be created by `blocked_pca::compute()` with `Options::components_from_residuals = false`.
+ * In this mode, only the rotation vectors are computed from the residuals.
+ * The original expression values for each cell are then projected onto the associated subspace to obtain PC coordinates that can be used for further batch correction.
+ * This approach aims to preserve the benefits of blocking to focus on intra-block biology instead of inter-block differences,
  * without making strong assumptions about the nature of those differences.
  *
  * If one batch has many more cells than the others, it will dominate the PCA by driving the axes of maximum variance. 
