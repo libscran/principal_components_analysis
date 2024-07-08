@@ -2,7 +2,7 @@
 
 ![Unit tests](https://github.com/libscran/principal_component_analysis/actions/workflows/run-tests.yaml/badge.svg)
 ![Documentation](https://github.com/libscran/principal_component_analysis/actions/workflows/doxygenate.yaml/badge.svg)
-[![Codecov](https://codecov.io/gh/libscran/principal_components_analysis/graph/badge.svg?token=qklLZtJSE9)](https://codecov.io/gh/libscran/principal_components_analysis)
+[![Codecov](https://codecov.io/gh/libscran/principal_component_analysis/graph/badge.svg?token=qklLZtJSE9)](https://codecov.io/gh/libscran/principal_component_analysis)
 
 ## Overview
 
