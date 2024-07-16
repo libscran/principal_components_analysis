@@ -13,7 +13,7 @@ factored out into a separate C++ library for easier re-use.
 
 ## Quick start
 
-Given a [`tatami::Matrix`](https://github.com/tatami-inc/tatami), the `simple_pca::compute()` function will compute the PCA to obtain a low-dimensional representation of the cells:
+Given a [`tatami::Matrix`](https://github.com/tatami-inc/tatami), the `scran_pca::simple_pca()` function will compute the PCA to obtain a low-dimensional representation of the cells:
 
 ```cpp
 #include "scran_pca/scran_pca.hpp"
@@ -55,7 +55,7 @@ bres.center; // rows are blocks, columns are genes.
 The components derived from the residuals will only be free of inter-block differences under certain conditions (equal population composition with a consistent shift between blocks).
 If this is not the case, more sophisticated batch correction methods are required.
 If those methods accept a low-dimensional representation for the cells as input, 
-we can use `blocked_pca::compute()` to obtain an appropriate matrix that focuses on intra-block variation without making assumptions about the inter-block differences:
+we can use `scran_pca::blocked_pca()` to obtain an appropriate matrix that focuses on intra-block variation without making assumptions about the inter-block differences:
 
 ```cpp
 bopt.components_from_residuals = false;
