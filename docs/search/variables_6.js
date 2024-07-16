@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['max_5fiterations_0',['max_iterations',['https://ltla.github.io/CppIrlba/structirlba_1_1Options.html#afc7f9a04a63cc7033c2103cdebab3612',1,'irlba::Options']]]
+  ['number_0',['number',['https://tatami-inc.github.io/tatami/structtatami_1_1SparseRange.html#a8b959e01323bdbe112a6432b3c51a038',1,'tatami::SparseRange']]]
 ];

@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['somenumerictype_0',['SomeNumericType',['https://tatami-inc.github.io/tatami/namespacetatami.html#a6c4e0b21d1826723cc5ea81d889a73e5',1,'tatami']]],
-  ['specialcompareoperation_1',['SpecialCompareOperation',['https://tatami-inc.github.io/tatami/namespacetatami.html#a4ef624db40413dabc3fea554fc936d39',1,'tatami']]]
+  ['weightpolicy_0',['WeightPolicy',['https://libscran.github.io/scran_blocks/namespacescran__blocks.html#ac2412948da94055ff438267ba089ba97',1,'scran_blocks']]]
 ];

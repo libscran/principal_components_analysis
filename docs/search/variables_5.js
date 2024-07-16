@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['lower_5fbound_0',['lower_bound',['https://libscran.github.io/core_utils/structscran_1_1block__weights_1_1VariableParameters.html#a79fe089ceefdb0ccf951c123e744fd9d',1,'scran::block_weights::VariableParameters']]]
+  ['max_5fiterations_0',['max_iterations',['https://ltla.github.io/CppIrlba/structirlba_1_1Options.html#afc7f9a04a63cc7033c2103cdebab3612',1,'irlba::Options']]]
 ];
