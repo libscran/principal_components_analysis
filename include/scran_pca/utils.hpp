@@ -9,9 +9,9 @@
 #include "tatami/tatami.hpp"
 #include "tatami_stats/tatami_stats.hpp"
 
-namespace scran {
+namespace scran_pca {
 
-namespace pca_utils {
+namespace internal {
 
 template<class EigenVector_>
 auto process_scale_vector(bool scale, EigenVector_& scale_v) {

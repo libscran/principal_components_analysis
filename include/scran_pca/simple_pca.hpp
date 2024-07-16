@@ -1,5 +1,5 @@
-#ifndef SCRAN_SIMPLE_PCA_HPP
-#define SCRAN_SIMPLE_PCA_HPP
+#ifndef SCRAN_PCA_SIMPLE_PCA_HPP
+#define SCRAN_PCA_SIMPLE_PCA_HPP
 
 #include "tatami/tatami.hpp"
 #include "tatami_stats/tatami_stats.hpp"
@@ -10,34 +10,23 @@
 #include <vector>
 #include <cmath>
 
-#include "pca_utils.hpp"
+#include "utils.hpp"
 
 /**
  * @file simple_pca.hpp
  * @brief Perform a simple PCA on a gene-by-cell matrix.
  */
 
-namespace scran {
+namespace scran_pca {
 
 /**
- * @namespace scran::simple_pca
- * @brief Perform a simple PCA on a gene-cell matrix.
- *
- * Principal components analysis (PCA) is a helpful technique for data compression and denoising.
- * The idea is that the earlier PCs capture most of the systematic biological variation while the later PCs capture random technical noise.
- * Thus, we can reduce the size of the data and eliminate noise by only using the earlier PCs for further analyses.
- * Most practitioners will keep the first 10-50 PCs, though the exact choice is fairly arbitrary.
+ * @brief Options for `simple_pca()`.
  */
-namespace simple_pca {
-
-/**
- * @brief Options for `compute()`.
- */
-struct Options {
+struct SimplePcaOptions {
     /**
      * @cond
      */
-    Options() {
+    SimplePcaOptions() {
         irlba_options.cap_number = true;
     }
     /**
@@ -144,7 +133,7 @@ template<class IrlbaMatrix_, class EigenMatrix_, class EigenVector_>
 void run_irlba_deferred(
     const IrlbaMatrix_& mat,
     int rank,
-    const Options& options,
+    const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained,
@@ -164,7 +153,7 @@ template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector
 void run_sparse(
     const tatami::Matrix<Value_, Index_>* mat, 
     int rank,
-    const Options& options,
+    const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained,
@@ -209,14 +198,14 @@ void run_sparse(
             }
         }, ngenes, options.num_threads);
 
-        total_var = pca_utils::process_scale_vector(options.scale, scale_v);
+        total_var = internal::process_scale_vector(options.scale, scale_v);
         run_irlba_deferred(emat, rank, options, components, rotation, variance_explained, center_v, scale_v);
 
     } else {
         compute_row_means_and_variances<true>(mat, options.num_threads, center_v, scale_v);
-        total_var = pca_utils::process_scale_vector(options.scale, scale_v);
+        total_var = internal::process_scale_vector(options.scale, scale_v);
         run_irlba_deferred(
-            pca_utils::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
+            internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
             rank, 
             options, 
             components, 
@@ -232,7 +221,7 @@ template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector
 void run_dense(
     const tatami::Matrix<Value_, Index_>* mat, 
     int rank,
-    const Options& options,
+    const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
@@ -268,7 +257,7 @@ void run_dense(
             std::fill(scale_v.begin(), scale_v.end(), std::numeric_limits<typename EigenVector_::Scalar>::quiet_NaN());
         }
 
-        total_var = pca_utils::process_scale_vector(options.scale, scale_v);
+        total_var = internal::process_scale_vector(options.scale, scale_v);
         if (options.scale) {
             emat.array().rowwise() /= scale_v.adjoint().array();
         }
@@ -277,9 +266,9 @@ void run_dense(
 
     } else {
         compute_row_means_and_variances<false>(mat, options.num_threads, center_v, scale_v);
-        total_var = pca_utils::process_scale_vector(options.scale, scale_v);
+        total_var = internal::process_scale_vector(options.scale, scale_v);
         run_irlba_deferred(
-            pca_utils::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
+            internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
             rank, 
             options, 
             components, 
@@ -295,7 +284,7 @@ template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector
 void dispatch(
     const tatami::Matrix<Value_, Index_>* mat, 
     int rank, 
-    const Options& options,
+    const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
@@ -311,7 +300,7 @@ void dispatch(
         run_dense(mat, rank, options, components, rotation, variance_explained, center_v, scale_v, total_var);
     }
 
-    pca_utils::clean_up(mat->ncol(), components, variance_explained);
+    internal::clean_up(mat->ncol(), components, variance_explained);
     if (options.transpose) {
         components.adjointInPlace();
     }
@@ -323,19 +312,17 @@ void dispatch(
  */
 
 /**
- * @brief Container for the PCA results.
+ * @brief Results of `simple_pca()`.
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
- *
- * Instances should be constructed by the `compute()` function.
  */
 template<typename EigenMatrix_, typename EigenVector_>
-struct Results {
+struct SimplePcaResults {
     /**
      * Matrix of principal components.
      * By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix.
-     * If `Options::transpose = false`, rows are cells instead.
-     * The number of PCs is determined by the `rank` used in `compute()`.
+     * If `SimplePcaOptions::transpose = false`, rows are cells instead.
+     * The number of PCs is determined by the `rank` used in `simple_pca()`.
      */
     EigenMatrix_ components;
 
@@ -346,7 +333,7 @@ struct Results {
     EigenVector_ variance_explained;
 
     /**
-     * Total variance of the dataset (possibly after scaling, if `Options::scale = true`).
+     * Total variance of the dataset (possibly after scaling, if `SimplePcaOptions::scale = true`).
      * This can be used to divide `variance_explained` to obtain the percentage of variance explained.
      */
     typename EigenVector_::Scalar total_variance = 0;
@@ -354,7 +341,7 @@ struct Results {
     /**
      * Rotation matrix. 
      * Each row corresponds to a feature while each column corresponds to a PC.
-     * The number of PCs is determined by the `rank` used in `compute()`.
+     * The number of PCs is determined by the `rank` used in `simple_pca()`.
      */
     EigenMatrix_ rotation;
 
@@ -365,14 +352,42 @@ struct Results {
     EigenVector_ center;
 
     /**
-     * Scaling vector, only returned if `Options::scale = true`.
-     * Each entry corresponds to a row in the matrix and contains the scaling factor used to divide the feature values if `Options::scale = true`.
+     * Scaling vector, only returned if `SimplePcaOptions::scale = true`.
+     * Each entry corresponds to a row in the matrix and contains the scaling factor used to divide the feature values if `SimplePcaOptions::scale = true`.
      */
     EigenVector_ scale;
 };
 
 /**
- * Run PCA on an input gene-by-cell matrix.
+ * Principal components analysis (PCA) is a helpful technique for data compression and denoising.
+ * The idea is that the earlier PCs capture most of the systematic biological variation while the later PCs capture random technical noise.
+ * Thus, we can reduce the size of the data and eliminate noise by only using the earlier PCs for further analyses.
+ * Most practitioners will keep the first 10-50 PCs, though the exact choice is fairly arbitrary. *
+ *
+ * @tparam Value_ Type of the matrix data.
+ * @tparam Index_ Integer type for the indices.
+ * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
+ * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
+ *
+ * @param[in] mat Pointer to the input matrix.
+ * Columns should contain cells while rows should contain genes.
+ * @param rank Number of PCs to compute.
+ * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
+ * otherwise, only the maximum number of PCs will be reported in the results.
+ * @param options Further options.
+ * @param[out] output On output, the results of the PCA on `mat`.
+ * This can be re-used across multiple calls to `simple_pca()`. 
+ */
+template<typename Value_, typename Index_, typename EigenMatrix_, class EigenVector_>
+void simple_pca(const tatami::Matrix<Value_, Index_>* mat, int rank, const SimplePcaOptions& options, SimplePcaResults<EigenMatrix_, EigenVector_>& output) {
+    internal::dispatch(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+    if (!options.scale) {
+        output.scale = EigenVector_();
+    }
+}
+
+/**
+ * Overload of `simple_pca()` that allocates memory for the output.
  *
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
@@ -386,20 +401,13 @@ struct Results {
  * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  *
- * @return The results of the PCA on `mat`.
+ * @return Results of the PCA.
  */
-template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_ = double, typename Index_ = int>
-Results<EigenMatrix_, EigenVector_> compute(const tatami::Matrix<Value_, Index_>* mat, int rank, const Options& options) {
-    Results<EigenMatrix_, EigenVector_> output;
+template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_, typename Index_>
+SimplePcaResults<EigenMatrix_, EigenVector_> simple_pca(const tatami::Matrix<Value_, Index_>* mat, int rank, const SimplePcaOptions& options) {
+    SimplePcaResults<EigenMatrix_, EigenVector_> output;
     internal::dispatch(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
-
-    if (!options.scale) {
-        output.scale = EigenVector_();
-    }
-
     return output;
-}
-
 }
 
 }

@@ -1,5 +1,5 @@
-#ifndef SCRAN_BLOCKED_PCA_HPP
-#define SCRAN_BLOCKED_PCA_HPP
+#ifndef SCRAN_PCA_BLOCKED_PCA_HPP
+#define SCRAN_PCA_BLOCKED_PCA_HPP
 
 #include "tatami/tatami.hpp"
 #include "irlba/irlba.hpp"
@@ -9,8 +9,8 @@
 #include <vector>
 #include <cmath>
 
-#include "block_weights.hpp"
-#include "pca_utils.hpp"
+#include "scran_blocks/scran_blocks.hpp"
+#include "utils.hpp"
 
 /**
  * @file blocked_pca.hpp
@@ -18,47 +18,16 @@
  * @brief Perform PCA on residuals after regressing out a blocking factor.
  */
 
-namespace scran {
+namespace scran_pca {
 
 /**
- * @namespace scran::blocked_pca
- * @brief Perform PCA on residuals after regressing out a blocking factor.
- *
- * In the presence of a blocking factor (e.g., batches, samples), we want to ensure that the PCA is not driven by uninteresting differences between blocks.
- * To achieve this, `blocked_pca::compute()` centers the expression of each gene in each blocking level and uses the residuals for PCA.
- * The gene-gene covariance matrix will thus focus on variation within each batch, 
- * ensuring that the top rotation vectors/principal components capture biological heterogeneity instead of inter-block differences.
- * Internally, `blocked_pca::compute()` defers the residual calculation until the matrix multiplication steps within [IRLBA](https://github.com/LTLA/CppIrlba).
- * This yields the same results as the naive calculation of residuals but is much faster as it can take advantage of efficient sparse operations.
- *
- * By default, the principal components are computed from the (conceptual) matrix of residuals.
- * This yields a low-dimensional space where all inter-block differences have been removed,
- * assuming that all blocks have the same composition and the inter-block differences are consistent for all cell subpopulations.
- * Under these assumptions, we could use these components for downstream analysis without any concern for block-wise effects.
- * In practice, these assumptions do not hold and more sophisticated batch correction methods like [MNN correction](https://github.com/LTLA/CppMnnCorrect) are required.
- * Some of these methods accept a low-dimensional embedding of cells as input, which can be created by `blocked_pca::compute()` with `Options::components_from_residuals = false`.
- * In this mode, only the rotation vectors are computed from the residuals.
- * The original expression values for each cell are then projected onto the associated subspace to obtain PC coordinates that can be used for further batch correction.
- * This approach aims to preserve the benefits of blocking to focus on intra-block biology instead of inter-block differences,
- * without making strong assumptions about the nature of those differences.
- *
- * If one batch has many more cells than the others, it will dominate the PCA by driving the axes of maximum variance. 
- * This may mask interesting aspects of variation in the smaller batches.
- * To mitigate this, we scale each batch in inverse proportion to its size (see `Options::block_weight_policy`).
- * This ensures that each batch contributes equally to the (conceptual) gene-gene covariance matrix and thus the rotation vectors.
- * The vector of residuals for each cell (or the original expression values, if `Options::components_from_residuals = false`) 
- * is then projected to the subspace defined by these rotation vectors to obtain that cell's PC coordinates.
+ * @brief BlockedPcaOptions for `blocked_pca()`.
  */
-namespace blocked_pca {
-
-/**
- * @brief Options for `compute()`.
- */
-struct Options {
+struct BlockedPcaOptions {
     /**
      * @cond
      */
-    Options() {
+    BlockedPcaOptions() {
         irlba_options.cap_number = true;
     }
     /**
@@ -80,13 +49,13 @@ struct Options {
     /**
      * Policy to use for weighting batches of different size.
      */
-    block_weights::Policy block_weight_policy = block_weights::Policy::VARIABLE;
+    scran_blocks::WeightPolicy block_weight_policy = scran_blocks::WeightPolicy::VARIABLE;
 
     /**
      * Parameters for the variable block weights.
-     * Only used when `Options::block_weight_policy = block_weights::Policy::VARIABLE`.
+     * Only used when `BlockedPcaOptions::block_weight_policy = scran_blocks::WeightPolicy::VARIABLE`.
      */
-    block_weights::VariableParameters variable_block_weight_parameters;
+    scran_blocks::VariableWeightParameters variable_block_weight_parameters;
 
     /**
      * Compute the principal components from the residuals.
@@ -138,12 +107,12 @@ template<class EigenVector_, typename Index_, typename Block_>
 BlockingDetails<Index_, EigenVector_> compute_blocking_details(
     Index_ ncells,
     const Block_* block,
-    block_weights::Policy block_weight_policy, 
-    const block_weights::VariableParameters& variable_block_weight_parameters) 
+    scran_blocks::WeightPolicy block_weight_policy, 
+    const scran_blocks::VariableWeightParameters& variable_block_weight_parameters) 
 {
     BlockingDetails<Index_, EigenVector_> output;
     output.block_size = tatami_stats::tabulate_groups(block, ncells);
-    if (block_weight_policy == block_weights::Policy::NONE) {
+    if (block_weight_policy == scran_blocks::WeightPolicy::NONE) {
         return output;
     }
 
@@ -162,8 +131,8 @@ BlockingDetails<Index_, EigenVector_> compute_blocking_details(
         // 'compute_blockwise_mean_and_variance*()' functions.
         if (bsize) {
             typename EigenVector_::Scalar block_weight = 1;
-            if (block_weight_policy == block_weights::Policy::VARIABLE) {
-                block_weight = block_weights::compute_variable(bsize, variable_block_weight_parameters);
+            if (block_weight_policy == scran_blocks::WeightPolicy::VARIABLE) {
+                block_weight = scran_blocks::compute_variable_weight(bsize, variable_block_weight_parameters);
             }
 
             element_weight[i] = block_weight / bsize;
@@ -198,7 +167,7 @@ BlockingDetails<Index_, EigenVector_> compute_blocking_details(
  *****************************************************************/
 
 template<typename Num_, typename Value_, typename Index_, typename Block_, typename EigenVector_, typename Float_>
-void compute_sparse_mean_and_variance(
+void compute_sparse_mean_and_variance_blocked(
     Num_ num_nonzero, 
     const Value_* values, 
     const Index_* indices, 
@@ -257,12 +226,12 @@ void compute_sparse_mean_and_variance(
     // COMMENT ON DENOMINATOR:
     // If we're not dealing with weights, we compute the actual sample
     // variance for easy interpretation (and to match up with the
-    // per-PC calculations in pca_utils::clean_up).
+    // per-PC calculations in internal::clean_up).
     //
     // If we're dealing with weights, the concept of the sample variance
     // becomes somewhat weird, but we just use the same denominator for
     // consistency in clean_up_projected. Magnitude doesn't matter when
-    // scaling for pca_utils::process_scale_vector anyway.
+    // scaling for internal::process_scale_vector anyway.
     variance /= num_all - 1;
 }
 
@@ -288,7 +257,7 @@ void compute_blockwise_mean_and_variance_realized_sparse(
 
         for (size_t c = start, end = start + length; c < end; ++c, mptr += nblocks) {
             auto offset = ptrs[c];
-            compute_sparse_mean_and_variance(
+            compute_sparse_mean_and_variance_blocked(
                 ptrs[c + 1] - offset,
                 values.data() + offset,
                 indices.data() + offset,
@@ -304,7 +273,7 @@ void compute_blockwise_mean_and_variance_realized_sparse(
 }
 
 template<typename Num_, typename Value_, typename Block_, typename Index_, typename EigenVector_, typename Float_>
-void compute_dense_mean_and_variance(
+void compute_dense_mean_and_variance_blocked(
     Num_ number, 
     const Value_* values, 
     const Block_* block, 
@@ -363,7 +332,7 @@ void compute_blockwise_mean_and_variance_realized_dense(
         auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
 
         for (size_t c = start, end = start + length; c < end; ++c, ptr += ncells, mptr += nblocks) {
-            compute_dense_mean_and_variance(ncells, ptr, block, block_details, mptr, variances[c]);
+            compute_dense_mean_and_variance_blocked(ncells, ptr, block, block_details, mptr, variances[c]);
         }
     }, emat.cols(), nthreads);
 }
@@ -395,13 +364,13 @@ void compute_blockwise_mean_and_variance_tatami(
                 auto ext = tatami::consecutive_extractor<true>(mat, true, start, length);
                 for (Index_ r = start, end = start + length; r < end; ++r, mptr += nblocks) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
-                    compute_sparse_mean_and_variance(range.number, range.value, range.index, block, block_details, mptr, variances[r], block_copy, ncells);
+                    compute_sparse_mean_and_variance_blocked(range.number, range.value, range.index, block, block_details, mptr, variances[r], block_copy, ncells);
                 }
             } else {
                 auto ext = tatami::consecutive_extractor<false>(mat, true, start, length);
                 for (Index_ r = start, end = start + length; r < end; ++r, mptr += nblocks) {
                     auto ptr = ext->fetch(vbuffer.data());
-                    compute_dense_mean_and_variance(ncells, ptr, block, block_details, mptr, variances[r]);
+                    compute_dense_mean_and_variance_blocked(ncells, ptr, block, block_details, mptr, variances[r]);
                 }
             }
         }, ngenes, nthreads);
@@ -776,12 +745,12 @@ private:
  **************************/
 
 template<bool realize_matrix_, bool sparse_, typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
-void run_general(
+void run_blocked(
     const tatami::Matrix<Value_, Index_>* mat, 
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details, 
     int rank,
-    const Options& options,
+    const BlockedPcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
@@ -793,7 +762,7 @@ void run_general(
 
     auto emat = [&]{
         if constexpr(!realize_matrix_) {
-            return pca_utils::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads);
+            return internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads);
 
         } else if constexpr(sparse_) {
             // 'extracted' contains row-major contents... but we implicitly transpose it to CSC with genes in columns.
@@ -819,7 +788,7 @@ void run_general(
     } else {
         compute_blockwise_mean_and_variance_realized_dense(emat, block, block_details, center_m, scale_v, options.num_threads);
     }
-    total_var = pca_utils::process_scale_vector(options.scale, scale_v);
+    total_var = internal::process_scale_vector(options.scale, scale_v);
 
     ResidualWrapper<decltype(emat), Block_, EigenMatrix_, EigenVector_> centered(emat, block, center_m);
 
@@ -867,7 +836,7 @@ void run_general(
         }
 
         if (options.components_from_residuals) {
-            pca_utils::clean_up(mat->ncol(), components, variance_explained);
+            internal::clean_up(mat->ncol(), components, variance_explained);
             if (options.transpose) {
                 components.adjointInPlace();
             }
@@ -893,11 +862,11 @@ void run_general(
 }
 
 template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
-void dispatch(
+void dispatch_blocked(
     const tatami::Matrix<Value_, Index_>* mat, 
     const Block_* block,
     int rank,
-    const Options& options,
+    const BlockedPcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
     EigenVector_& variance_explained, 
@@ -910,15 +879,15 @@ void dispatch(
 
     if (mat->sparse()) {
         if (options.realize_matrix) {
-            run_general<true, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            run_blocked<true, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         } else {
-            run_general<false, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            run_blocked<false, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
     } else {
         if (options.realize_matrix) {
-            run_general<true, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            run_blocked<true, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         } else {
-            run_general<false, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            run_blocked<false, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
     }
 }
@@ -929,17 +898,18 @@ void dispatch(
  */
 
 /**
- * @brief Results of the PCA on the residuals.
+ * @brief Results of `blocked_pca()`.
  *
- * Instances should generally be constructed by the `compute()` function.
+ * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
+ * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  */
 template<typename EigenMatrix_, typename EigenVector_>
-struct Results {
+struct BlockedPcaResults {
     /**
      * Matrix of principal components.
      * By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix.
-     * If `Options::transpose = false`, rows are cells instead.
-     * The number of PCs is determined by the `rank` used in `compute()`.
+     * If `BlockedPcaOptions::transpose = false`, rows are cells instead.
+     * The number of PCs is determined by the `rank` used in `blocked_pca()`.
      */
     EigenMatrix_ components;
 
@@ -950,7 +920,7 @@ struct Results {
     EigenVector_ variance_explained;
 
     /**
-     * Total variance of the dataset (possibly after scaling, if `Options::scale = true`).
+     * Total variance of the dataset (possibly after scaling, if `BlockedPcaOptions::scale = true`).
      * This can be used to divide `variance_explained` to obtain the percentage of variance explained.
      */
     typename EigenVector_::Scalar total_variance = 0;
@@ -958,7 +928,7 @@ struct Results {
     /**
      * Rotation matrix.
      * Each row corresponds to a gene while each column corresponds to a PC.
-     * The number of PCs is determined by the `rank` used in `compute()`.
+     * The number of PCs is determined by the `rank` used in `blocked_pca()`.
      */
     EigenMatrix_ rotation;
 
@@ -970,14 +940,66 @@ struct Results {
     EigenMatrix_ center;
 
     /**
-     * Scaling vector, only returned if `Options::scale = true`.
-     * Each entry corresponds to a row in the input matrix and contains the scaling factor used to divide that gene's values if `Options::scale = true`.
+     * Scaling vector, only returned if `BlockedPcaOptions::scale = true`.
+     * Each entry corresponds to a row in the input matrix and contains the scaling factor used to divide that gene's values if `BlockedPcaOptions::scale = true`.
      */
     EigenVector_ scale;
 };
 
 /**
- * Run PCA on the residuals after regressing out a blocking factor from the rows of a gene-by-cell matrix.
+ * In the presence of a blocking factor (e.g., batches, samples), we want to ensure that the PCA is not driven by uninteresting differences between blocks.
+ * To achieve this, `blocked_pca()` centers the expression of each gene in each blocking level and uses the residuals for PCA.
+ * The gene-gene covariance matrix will thus focus on variation within each batch, 
+ * ensuring that the top rotation vectors/principal components capture biological heterogeneity instead of inter-block differences.
+ * Internally, `blocked_pca()` defers the residual calculation until the matrix multiplication steps within [IRLBA](https://github.com/LTLA/CppIrlba).
+ * This yields the same results as the naive calculation of residuals but is much faster as it can take advantage of efficient sparse operations.
+ *
+ * By default, the principal components are computed from the (conceptual) matrix of residuals.
+ * This yields a low-dimensional space where all inter-block differences have been removed,
+ * assuming that all blocks have the same composition and the inter-block differences are consistent for all cell subpopulations.
+ * Under these assumptions, we could use these components for downstream analysis without any concern for block-wise effects.
+ * In practice, these assumptions do not hold and more sophisticated batch correction methods like [MNN correction](https://github.com/LTLA/CppMnnCorrect) are required.
+ * Some of these methods accept a low-dimensional embedding of cells as input, which can be created by `blocked_pca()` with `BlockedPcaOptions::components_from_residuals = false`.
+ * In this mode, only the rotation vectors are computed from the residuals.
+ * The original expression values for each cell are then projected onto the associated subspace to obtain PC coordinates that can be used for further batch correction.
+ * This approach aims to preserve the benefits of blocking to focus on intra-block biology instead of inter-block differences,
+ * without making strong assumptions about the nature of those differences.
+ *
+ * If one batch has many more cells than the others, it will dominate the PCA by driving the axes of maximum variance. 
+ * This may mask interesting aspects of variation in the smaller batches.
+ * To mitigate this, we scale each batch in inverse proportion to its size (see `BlockedPcaOptions::block_weight_policy`).
+ * This ensures that each batch contributes equally to the (conceptual) gene-gene covariance matrix and thus the rotation vectors.
+ * The vector of residuals for each cell (or the original expression values, if `BlockedPcaOptions::components_from_residuals = false`) 
+ * is then projected to the subspace defined by these rotation vectors to obtain that cell's PC coordinates.
+ *
+ * @tparam Value_ Type of the matrix data.
+ * @tparam Index_ Integer type for the indices.
+ * @tparam Block_ Integer type for the blocking factor.
+ * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
+ * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
+ *
+ * @param[in] mat Pointer to the input matrix.
+ * Columns should contain cells while rows should contain genes.
+ * @param[in] block Pointer to an array of length equal to the number of cells, 
+ * containing the block assignment for each cell. 
+ * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
+ * @param rank Number of PCs to compute.
+ * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
+ * otherwise, only the maximum number of PCs will be reported in the results.
+ * @param options Further options.
+ * @param[out] output On output, the results of the PCA on the residuals. 
+ * This can be re-used across multiple calls to `blocked_pca()`. 
+ */
+template<typename Value_, typename Index_, typename Block_, typename EigenMatrix_, class EigenVector_>
+void blocked_pca(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const BlockedPcaOptions& options, BlockedPcaResults<EigenMatrix_, EigenVector_>& output) {
+    internal::dispatch_blocked(mat, block, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+    if (!options.scale) {
+        output.scale = EigenVector_();
+    }
+}
+
+/**
+ * Overload of `blocked_pca()` that allocates memory for the output.
  *
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
@@ -995,15 +1017,13 @@ struct Results {
  * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  *
- * @return The results of the PCA on the residuals. 
+ * @return Results of the PCA on the residuals. 
  */
-template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_ = double, typename Index_ = int, typename Block_ = int>
-Results<EigenMatrix_, EigenVector_> compute(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const Options& options) {
-    Results<EigenMatrix_, EigenVector_> output;
-    internal::dispatch(mat, block, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_, typename Index_, typename Block_>
+BlockedPcaResults<EigenMatrix_, EigenVector_> blocked_pca(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const BlockedPcaOptions& options) {
+    BlockedPcaResults<EigenMatrix_, EigenVector_> output;
+    blocked_pca(mat, block, rank, options, output);
     return output;
-}
-
 }
 
 }
