@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#include "compare_almost_equal.h"
+#include "scran_tests/scran_tests.hpp"
 
 #include "Eigen/Dense"
 #include "tatami/tatami.hpp"
@@ -35,7 +35,7 @@ inline void expect_equal_pcs(const Eigen::MatrixXd& left, const Eigen::MatrixXd&
             auto aleft = std::abs(left(i, j));
             auto aright = std::abs(right(i, j));
             if (relative) {
-                compare_almost_equal(aleft, aright, tol);
+                scran_tests::compare_almost_equal(aleft, aright, tol);
             } else if (std::abs(aleft - aright) > tol) {
                 EXPECT_TRUE(false) << "mismatch in almost-equal floats (expected " << aleft << ", got " << aright << ")";
             }
@@ -45,7 +45,6 @@ inline void expect_equal_pcs(const Eigen::MatrixXd& left, const Eigen::MatrixXd&
         EXPECT_TRUE(std::abs(left.row(i).sum()) < tol);
         EXPECT_TRUE(std::abs(right.row(i).sum()) < tol);
     }
-    return;
 }
 
 inline void expect_equal_rotation(const Eigen::MatrixXd& left, const Eigen::MatrixXd& right, double tol=1e-8) {
@@ -57,17 +56,16 @@ inline void expect_equal_rotation(const Eigen::MatrixXd& left, const Eigen::Matr
         for (int j = 0; j < ngenes; ++j) {
             auto aleft = std::abs(left(i, j));
             auto aright = std::abs(right(i, j));
-            compare_almost_equal(aleft, aright, tol);
+            scran_tests::compare_almost_equal(aleft, aright, tol);
         }
     }
-    return;
 }
 
 inline void expect_equal_vectors(const Eigen::VectorXd& left, const Eigen::VectorXd& right, double tol=1e-8) {
     int n = left.size();
     ASSERT_EQ(n, right.size());
     for (int i = 0; i < n; ++i) {
-        compare_almost_equal(left[i], right[i], tol);
+        scran_tests::compare_almost_equal(left[i], right[i], tol);
     }
 }
 
@@ -78,7 +76,7 @@ inline void compare_almost_equal(const Eigen::MatrixXd& left, const Eigen::Matri
 
     for (int c = 0; c < ngenes; ++c) {
         for (int r = 0; r < ndims; ++r) {
-            compare_almost_equal(left(r, c), right(r, c), tol);
+            scran_tests::compare_almost_equal(left(r, c), right(r, c), tol);
         }
     }
 }
