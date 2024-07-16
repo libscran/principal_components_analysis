@@ -42,7 +42,7 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = "scran_principal_component_analysis"
+PROJECT_NAME           = "scran_pca"
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
@@ -917,7 +917,9 @@ WARN_LOGFILE           =
 # spaces. See also FILE_PATTERNS and EXTENSION_MAPPING
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = ../include/scran \
+INPUT                  = ../include/scran_pca/scran_pca.hpp \
+                         ../include/scran_pca/simple_pca.hpp \
+                         ../include/scran_pca/blocked_pca.hpp \
                          ../README.md
 
 # This tag can be used to specify the character encoding of the source files
@@ -2370,7 +2372,7 @@ SKIP_FUNCTION_MACROS   = YES
 # run, you must also specify the path to the tagfile here.
 
 TAGFILES               = tatami.tag=https://tatami-inc.github.io/tatami \
-                         scran_core_utils.tag=https://libscran.github.io/core_utils \
+                         scran_blocks.tag=https://libscran.github.io/scran_blocks \
                          irlba.tag=https://ltla.github.io/CppIrlba
 
 # When a file name is specified after GENERATE_TAGFILE, doxygen will create a

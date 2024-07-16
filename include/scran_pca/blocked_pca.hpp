@@ -21,7 +21,7 @@
 namespace scran_pca {
 
 /**
- * @brief BlockedPcaOptions for `blocked_pca()`.
+ * @brief Options for `blocked_pca()`.
  */
 struct BlockedPcaOptions {
     /**
