@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['u_0',['U',['https://ltla.github.io/CppIrlba/structirlba_1_1Results.html#a59ab34dac65eb90e6886b8a7df6ec245',1,'irlba::Results']]],
-  ['upper_5fbound_1',['upper_bound',['https://libscran.github.io/scran_blocks/structscran__blocks_1_1VariableWeightParameters.html#a865b484b6fc8611048fcadab863de6bf',1,'scran_blocks::VariableWeightParameters']]]
+  ['realize_5fmatrix_0',['realize_matrix',['../structscran__pca_1_1SimplePcaOptions.html#a2d20fac36e65846f1431042ac5a48660',1,'scran_pca::SimplePcaOptions::realize_matrix'],['../structscran__pca_1_1BlockedPcaOptions.html#a4bb1c0bd64ba1dc70246ce90f941dd1b',1,'scran_pca::BlockedPcaOptions::realize_matrix']]],
+  ['rotation_1',['rotation',['../structscran__pca_1_1SimplePcaResults.html#a3cc8c8bf58ca8fc62eb2bd141f4d6b73',1,'scran_pca::SimplePcaResults::rotation'],['../structscran__pca_1_1BlockedPcaResults.html#a442055b2a3841303ec4019394496c057',1,'scran_pca::BlockedPcaResults::rotation']]]
 ];
