@@ -339,7 +339,7 @@ void compute_blockwise_mean_and_variance_realized_dense(
 
 template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void compute_blockwise_mean_and_variance_tatami(
-    const tatami::Matrix<Value_, Index_>* mat, // this should have genes in the rows!
+    const tatami::Matrix<Value_, Index_>& mat, // this should have genes in the rows!
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details,
     EigenMatrix_& centers,
@@ -348,10 +348,10 @@ void compute_blockwise_mean_and_variance_tatami(
 {
     const auto& block_size = block_details.block_size;
     size_t nblocks = block_size.size();
-    Index_ ngenes = mat->nrow();
-    Index_ ncells = mat->ncol();
+    Index_ ngenes = mat.nrow();
+    Index_ ncells = mat.ncol();
 
-    if (mat->prefer_rows()) {
+    if (mat.prefer_rows()) {
         tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
             static_assert(!EigenMatrix_::IsRowMajor);
             auto mptr = centers.data() + static_cast<size_t>(start) * nblocks; // cast to avoid overflow.
@@ -359,15 +359,15 @@ void compute_blockwise_mean_and_variance_tatami(
 
             std::vector<Value_> vbuffer(ncells);
 
-            if (mat->is_sparse()) {
+            if (mat.is_sparse()) {
                 std::vector<Index_> ibuffer(ncells);
-                auto ext = tatami::consecutive_extractor<true>(mat, true, start, length);
+                auto ext = tatami::consecutive_extractor<true>(&mat, true, start, length);
                 for (Index_ r = start, end = start + length; r < end; ++r, mptr += nblocks) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                     compute_sparse_mean_and_variance_blocked(range.number, range.value, range.index, block, block_details, mptr, variances[r], block_copy, ncells);
                 }
             } else {
-                auto ext = tatami::consecutive_extractor<false>(mat, true, start, length);
+                auto ext = tatami::consecutive_extractor<false>(&mat, true, start, length);
                 for (Index_ r = start, end = start + length; r < end; ++r, mptr += nblocks) {
                     auto ptr = ext->fetch(vbuffer.data());
                     compute_dense_mean_and_variance_blocked(ncells, ptr, block, block_details, mptr, variances[r]);
@@ -402,7 +402,7 @@ void compute_blockwise_mean_and_variance_tatami(
 
             std::vector<Value_> vbuffer(length);
 
-            if (mat->is_sparse()) {
+            if (mat.is_sparse()) {
                 std::vector<tatami_stats::variances::RunningSparse<Scalar, Value_, Index_> > running;
                 running.reserve(nblocks);
                 for (size_t b = 0; b < nblocks; ++b) {
@@ -410,7 +410,7 @@ void compute_blockwise_mean_and_variance_tatami(
                 }
 
                 std::vector<Index_> ibuffer(length);
-                auto ext = tatami::consecutive_extractor<true>(mat, false, static_cast<Index_>(0), ncells, start, length);
+                auto ext = tatami::consecutive_extractor<true>(&mat, false, static_cast<Index_>(0), ncells, start, length);
                 for (Index_ c = 0; c < ncells; ++c) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                     running[block[c]].add(range.value, range.index, range.number);
@@ -427,7 +427,7 @@ void compute_blockwise_mean_and_variance_tatami(
                     running.emplace_back(length, re_centers[b].data(), re_variances[b].data(), /* skip_nan = */ false);
                 }
 
-                auto ext = tatami::consecutive_extractor<false>(mat, false, static_cast<Index_>(0), ncells, start, length);
+                auto ext = tatami::consecutive_extractor<false>(&mat, false, static_cast<Index_>(0), ncells, start, length);
                 for (Index_ c = 0; c < ncells; ++c) {
                     auto ptr = ext->fetch(vbuffer.data());
                     running[block[c]].add(ptr);
@@ -532,18 +532,18 @@ inline void project_matrix_realized_sparse(
 
 template<typename Value_, typename Index_, class EigenMatrix_>
 inline void project_matrix_transposed_tatami(
-    const tatami::Matrix<Value_, Index_>* mat, // genes in rows, cells in columns
+    const tatami::Matrix<Value_, Index_>& mat, // genes in rows, cells in columns
     EigenMatrix_& components,
     const EigenMatrix_& scaled_rotation, // genes in rows, dims in columns
     int nthreads) 
 {
     size_t rank = scaled_rotation.cols();
-    auto ngenes = mat->nrow(), ncells = mat->ncol();
+    auto ngenes = mat.nrow(), ncells = mat.ncol();
     typedef typename EigenMatrix_::Scalar Scalar;
 
     components.resize(rank, ncells); // used a transposed version for more cache efficiency.
 
-    if (mat->prefer_rows()) {
+    if (mat.prefer_rows()) {
         tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
             static_assert(!EigenMatrix_::IsRowMajor);
             auto vptr = scaled_rotation.data();
@@ -555,9 +555,9 @@ inline void project_matrix_transposed_tatami(
                 local_buffers.emplace_back(length);
             }
 
-            if (mat->is_sparse()) {
+            if (mat.is_sparse()) {
                 std::vector<Index_> ibuffer(length);
-                auto ext = tatami::consecutive_extractor<true>(mat, true, static_cast<Index_>(0), ngenes, start, length);
+                auto ext = tatami::consecutive_extractor<true>(&mat, true, static_cast<Index_>(0), ngenes, start, length);
                 for (Index_ g = 0; g < ngenes; ++g) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
                     for (size_t r = 0; r < rank; ++r) {
@@ -570,7 +570,7 @@ inline void project_matrix_transposed_tatami(
                 }
 
             } else {
-                auto ext = tatami::consecutive_extractor<false>(mat, true, static_cast<Index_>(0), ngenes, start, length);
+                auto ext = tatami::consecutive_extractor<false>(&mat, true, static_cast<Index_>(0), ngenes, start, length);
                 for (Index_ g = 0; g < ngenes; ++g) {
                     auto ptr = ext->fetch(vbuffer.data());
                     for (size_t r = 0; r < rank; ++r) {
@@ -597,9 +597,9 @@ inline void project_matrix_transposed_tatami(
             static_assert(!EigenMatrix_::IsRowMajor);
             auto optr = components.data() + static_cast<size_t>(start) * rank; // cast to avoid overflow.
 
-            if (mat->is_sparse()) {
+            if (mat.is_sparse()) {
                 std::vector<Index_> ibuffer(ngenes);
-                auto ext = tatami::consecutive_extractor<true>(mat, false, start, length);
+                auto ext = tatami::consecutive_extractor<true>(&mat, false, start, length);
 
                 for (Index_ c = start, end = start + length; c < end; ++c, optr += rank) {
                     auto range = ext->fetch(vbuffer.data(), ibuffer.data());
@@ -615,7 +615,7 @@ inline void project_matrix_transposed_tatami(
                 }
 
             } else {
-                auto ext = tatami::consecutive_extractor<false>(mat, false, start, length);
+                auto ext = tatami::consecutive_extractor<false>(&mat, false, start, length);
                 for (Index_ c = start, end = start + length; c < end; ++c, optr += rank) {
                     auto ptr = ext->fetch(vbuffer.data()); 
                     static_assert(!EigenMatrix_::IsRowMajor);
@@ -746,7 +746,7 @@ private:
 
 template<bool realize_matrix_, bool sparse_, typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
 void run_blocked(
-    const tatami::Matrix<Value_, Index_>* mat, 
+    const tatami::Matrix<Value_, Index_>& mat, 
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details, 
     int rank,
@@ -758,7 +758,7 @@ void run_blocked(
     EigenVector_& scale_v,
     typename EigenVector_::Scalar& total_var) 
 {
-    Index_ ngenes = mat->nrow(), ncells = mat->ncol(); 
+    Index_ ngenes = mat.nrow(), ncells = mat.ncol(); 
 
     auto emat = [&]{
         if constexpr(!realize_matrix_) {
@@ -766,14 +766,14 @@ void run_blocked(
 
         } else if constexpr(sparse_) {
             // 'extracted' contains row-major contents... but we implicitly transpose it to CSC with genes in columns.
-            auto extracted = tatami::retrieve_compressed_sparse_contents<Value_, Index_>(mat, /* row = */ true, /* two_pass = */ false, /* threads = */ options.num_threads);
+            auto extracted = tatami::retrieve_compressed_sparse_contents<Value_, Index_>(&mat, /* row = */ true, /* two_pass = */ false, /* threads = */ options.num_threads);
             return irlba::ParallelSparseMatrix(ncells, ngenes, std::move(extracted.value), std::move(extracted.index), std::move(extracted.pointers), true, options.num_threads); 
 
         } else {
             // Perform an implicit transposition by performing a row-major extraction into a column-major transposed matrix.
             EigenMatrix_ emat(ncells, ngenes); 
             static_assert(!EigenMatrix_::IsRowMajor);
-            tatami::convert_to_dense(mat, /* row_major = */ true, emat.data(), options.num_threads);
+            tatami::convert_to_dense(&mat, /* row_major = */ true, emat.data(), options.num_threads);
             return emat;
         }
     }();
@@ -836,7 +836,7 @@ void run_blocked(
         }
 
         if (options.components_from_residuals) {
-            internal::clean_up(mat->ncol(), components, variance_explained);
+            internal::clean_up(mat.ncol(), components, variance_explained);
             if (options.transpose) {
                 components.adjointInPlace();
             }
@@ -857,37 +857,6 @@ void run_blocked(
             if (!options.transpose) {
                 components.adjointInPlace();
             }
-        }
-    }
-}
-
-template<typename Value_, typename Index_, typename Block_, class EigenMatrix_, class EigenVector_>
-void dispatch_blocked(
-    const tatami::Matrix<Value_, Index_>* mat, 
-    const Block_* block,
-    int rank,
-    const BlockedPcaOptions& options,
-    EigenMatrix_& components, 
-    EigenMatrix_& rotation, 
-    EigenVector_& variance_explained, 
-    EigenMatrix_& center_m,
-    EigenVector_& scale_v,
-    double& total_var) 
-{
-    irlba::EigenThreadScope t(options.num_threads);
-    auto bdetails = compute_blocking_details<EigenVector_>(mat->ncol(), block, options.block_weight_policy, options.variable_block_weight_parameters);
-
-    if (mat->sparse()) {
-        if (options.realize_matrix) {
-            run_blocked<true, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
-        } else {
-            run_blocked<false, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
-        }
-    } else {
-        if (options.realize_matrix) {
-            run_blocked<true, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
-        } else {
-            run_blocked<false, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
     }
 }
@@ -978,7 +947,7 @@ struct BlockedPcaResults {
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  *
- * @param[in] mat Pointer to the input matrix.
+ * @param[in] mat Input expression matrix.
  * Columns should contain cells while rows should contain genes.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
@@ -991,8 +960,31 @@ struct BlockedPcaResults {
  * This can be re-used across multiple calls to `blocked_pca()`. 
  */
 template<typename Value_, typename Index_, typename Block_, typename EigenMatrix_, class EigenVector_>
-void blocked_pca(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const BlockedPcaOptions& options, BlockedPcaResults<EigenMatrix_, EigenVector_>& output) {
-    internal::dispatch_blocked(mat, block, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block, int rank, const BlockedPcaOptions& options, BlockedPcaResults<EigenMatrix_, EigenVector_>& output) {
+    irlba::EigenThreadScope t(options.num_threads);
+    auto bdetails = internal::compute_blocking_details<EigenVector_>(mat.ncol(), block, options.block_weight_policy, options.variable_block_weight_parameters);
+
+    EigenMatrix_& components = output.components;
+    EigenMatrix_& rotation = output.rotation;
+    EigenVector_& variance_explained = output.variance_explained;
+    EigenMatrix_& center_m = output.center;
+    EigenVector_& scale_v = output.scale;
+    auto& total_var = output.total_variance;
+
+    if (mat.sparse()) {
+        if (options.realize_matrix) {
+            internal::run_blocked<true, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+        } else {
+            internal::run_blocked<false, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+        }
+    } else {
+        if (options.realize_matrix) {
+            internal::run_blocked<true, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+        } else {
+            internal::run_blocked<false, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+        }
+    }
+
     if (!options.scale) {
         output.scale = EigenVector_();
     }
@@ -1007,7 +999,7 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>* mat, const Block_* block,
  * @tparam Index_ Integer type for the indices.
  * @tparam Block_ Integer type for the blocking factor.
  *
- * @param[in] mat Pointer to the input matrix.
+ * @param[in] mat Input expression matrix.
  * Columns should contain cells while rows should contain genes.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
@@ -1020,7 +1012,7 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>* mat, const Block_* block,
  * @return Results of the PCA on the residuals. 
  */
 template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_, typename Index_, typename Block_>
-BlockedPcaResults<EigenMatrix_, EigenVector_> blocked_pca(const tatami::Matrix<Value_, Index_>* mat, const Block_* block, int rank, const BlockedPcaOptions& options) {
+BlockedPcaResults<EigenMatrix_, EigenVector_> blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block, int rank, const BlockedPcaOptions& options) {
     BlockedPcaResults<EigenMatrix_, EigenVector_> output;
     blocked_pca(mat, block, rank, options, output);
     return output;

@@ -50,7 +50,7 @@ TEST_P(SimplePcaBasicTest, Test) {
 
     scran_pca::SimplePcaOptions opt;
     opt.scale = scale;
-    auto ref = scran_pca::simple_pca(dense_row.get(), rank, opt);
+    auto ref = scran_pca::simple_pca(*dense_row, rank, opt);
 
     if (threads == 1) {
         EXPECT_EQ(ref.variance_explained.size(), rank);
@@ -89,46 +89,46 @@ TEST_P(SimplePcaBasicTest, Test) {
     } else {
         // Results should be EXACTLY the same with parallelization.
         opt.num_threads = threads;
-        auto res1 = scran_pca::simple_pca(dense_row.get(), rank, opt);
+        auto res1 = scran_pca::simple_pca(*dense_row, rank, opt);
         EXPECT_EQ(ref.components, res1.components);
         EXPECT_EQ(ref.variance_explained, res1.variance_explained);
         EXPECT_EQ(ref.total_variance, res1.total_variance);
     }
 
     // Checking that we get more-or-less the same results. 
-    auto res2 = scran_pca::simple_pca(dense_column.get(), rank, opt);
+    auto res2 = scran_pca::simple_pca(*dense_column, rank, opt);
     expect_equal_pcs(ref.components, res2.components);
     expect_equal_vectors(ref.variance_explained, res2.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res2.total_variance);
 
-    auto res3 = scran_pca::simple_pca(sparse_row.get(), rank, opt);
+    auto res3 = scran_pca::simple_pca(*sparse_row, rank, opt);
     expect_equal_pcs(ref.components, res3.components);
     expect_equal_vectors(ref.variance_explained, res3.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res3.total_variance);
 
-    auto res4 = scran_pca::simple_pca(sparse_column.get(), rank, opt);
+    auto res4 = scran_pca::simple_pca(*sparse_column, rank, opt);
     expect_equal_pcs(ref.components, res4.components);
     expect_equal_vectors(ref.variance_explained, res4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, res4.total_variance);
 
     // Checking that we get more-or-less the same results. 
     opt.realize_matrix = false;
-    auto tres1 = scran_pca::simple_pca(dense_row.get(), rank, opt);
+    auto tres1 = scran_pca::simple_pca(*dense_row, rank, opt);
     expect_equal_pcs(ref.components, tres1.components);
     expect_equal_vectors(ref.variance_explained, tres1.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres1.total_variance);
 
-    auto tres2 = scran_pca::simple_pca(dense_column.get(), rank, opt);
+    auto tres2 = scran_pca::simple_pca(*dense_column, rank, opt);
     expect_equal_pcs(ref.components, tres2.components);
     expect_equal_vectors(ref.variance_explained, tres2.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres2.total_variance);
 
-    auto tres3 = scran_pca::simple_pca(sparse_row.get(), rank, opt);
+    auto tres3 = scran_pca::simple_pca(*sparse_row, rank, opt);
     expect_equal_pcs(ref.components, tres3.components);
     expect_equal_vectors(ref.variance_explained, tres3.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres3.total_variance);
 
-    auto tres4 = scran_pca::simple_pca(sparse_column.get(), rank, opt);
+    auto tres4 = scran_pca::simple_pca(*sparse_column, rank, opt);
     expect_equal_pcs(ref.components, tres4.components);
     expect_equal_vectors(ref.variance_explained, tres4.variance_explained);
     EXPECT_FLOAT_EQ(ref.total_variance, tres4.total_variance);
@@ -165,7 +165,7 @@ TEST_P(SimplePcaMoreTest, ZeroVariance) {
 
     auto copy = vec;
     size_t last_row = (nr - 1) * nc;
-    std::fill(copy.begin() + last_row, copy.begin() + last_row + nc, 0);
+    std::fill_n(copy.begin() + last_row, nc, 0);
     tatami::DenseRowMatrix<double, int> has_zero(nr, nc, std::move(copy));
 
     std::vector<double> removed(vec.begin(), vec.begin() + last_row);
@@ -175,7 +175,7 @@ TEST_P(SimplePcaMoreTest, ZeroVariance) {
     opt.scale = scale;
 
     // The initial vector is slightly different when we lose a feature, so we manually force our own random initialization.
-    auto raw_init = scran_tests::simulate_vector(nr * nc, [&]() {
+    auto raw_init = scran_tests::simulate_vector(nr, [&]() {
         scran_tests::SimulationParameters sparams;
         sparams.lower = -2;
         sparams.upper = 2;
@@ -188,12 +188,12 @@ TEST_P(SimplePcaMoreTest, ZeroVariance) {
     Eigen::VectorXd init(nr - 1);
     std::copy_n(raw_init.begin(), nr - 1, init.data());
     opt.irlba_options.initial = &init;
-    auto ref = scran_pca::simple_pca(&leftovers, rank, opt);
+    auto ref = scran_pca::simple_pca(leftovers, rank, opt);
 
     Eigen::VectorXd init2(nr);
     std::copy_n(raw_init.begin(), nr, init2.data());
     opt.irlba_options.initial = &init2;
-    auto out = scran_pca::simple_pca(&has_zero, rank, opt);
+    auto out = scran_pca::simple_pca(has_zero, rank, opt);
 
     expect_equal_pcs(ref.components, out.components); 
     expect_equal_vectors(ref.variance_explained, out.variance_explained);
@@ -201,7 +201,7 @@ TEST_P(SimplePcaMoreTest, ZeroVariance) {
 
     // Same behavior with sparse representation.
     auto sparse_zero = tatami::convert_to_compressed_sparse(&has_zero, true);
-    auto spout = scran_pca::simple_pca(sparse_zero.get(), rank, opt);
+    auto spout = scran_pca::simple_pca(*sparse_zero, rank, opt);
 
     expect_equal_pcs(spout.components, out.components);
     expect_equal_vectors(spout.variance_explained, out.variance_explained);

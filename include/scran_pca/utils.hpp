@@ -43,12 +43,12 @@ void clean_up(size_t NC, EigenMatrix_& U, EigenVector_& D) {
 template<class EigenVector_, typename Value_, typename Index_>
 class TransposedTatamiWrapper {
 public:
-    TransposedTatamiWrapper(const tatami::Matrix<Value_, Index_>* mat, int num_threads) : 
-        my_mat(mat), 
-        my_nrow(mat->nrow()),
-        my_ncol(mat->ncol()),
-        my_is_sparse(mat->is_sparse()),
-        my_prefer_rows(mat->prefer_rows()),
+    TransposedTatamiWrapper(const tatami::Matrix<Value_, Index_>& mat, int num_threads) : 
+        my_mat(&mat), 
+        my_nrow(mat.nrow()),
+        my_ncol(mat.ncol()),
+        my_is_sparse(mat.is_sparse()),
+        my_prefer_rows(mat.prefer_rows()),
         my_num_threads(num_threads)
     {}
 

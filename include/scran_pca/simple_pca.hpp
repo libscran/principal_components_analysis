@@ -68,13 +68,13 @@ struct SimplePcaOptions {
 namespace internal {
 
 template<bool sparse_, typename Value_, typename Index_, class EigenVector_>
-void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>* mat, int num_threads, EigenVector_& center_v, EigenVector_& scale_v) {
-    if (mat->prefer_rows()) {
+void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>& mat, int num_threads, EigenVector_& center_v, EigenVector_& scale_v) {
+    if (mat.prefer_rows()) {
         tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
             tatami::Options opt;
             opt.sparse_extract_index = false;
-            auto ext = tatami::consecutive_extractor<sparse_>(mat, true, start, length, opt);
-            auto ncells = mat->ncol();
+            auto ext = tatami::consecutive_extractor<sparse_>(&mat, true, start, length, opt);
+            auto ncells = mat.ncol();
             std::vector<Value_> vbuffer(ncells);
 
             for (Index_ r = start, end = start + length; r < end; ++r) {
@@ -90,13 +90,13 @@ void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>* mat, 
                 center_v.coeffRef(r) = results.first;
                 scale_v.coeffRef(r) = results.second;
             }
-        }, mat->nrow(), num_threads);
+        }, mat.nrow(), num_threads);
 
     } else {
         tatami::parallelize([&](size_t t, Index_ start, Index_ length) -> void {
             tatami::Options opt;
-            auto ncells = mat->ncol();
-            auto ext = tatami::consecutive_extractor<sparse_>(mat, false, 0, ncells, start, length, opt);
+            auto ncells = mat.ncol();
+            auto ext = tatami::consecutive_extractor<sparse_>(&mat, false, 0, ncells, start, length, opt);
 
             typedef typename EigenVector_::Scalar Scalar;
             tatami_stats::LocalOutputBuffer<Scalar> cbuffer(t, start, length, center_v.data());
@@ -125,7 +125,7 @@ void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>* mat, 
             running.finish();
             cbuffer.transfer();
             sbuffer.transfer();
-        }, mat->nrow(), num_threads);
+        }, mat.nrow(), num_threads);
     }
 }
 
@@ -151,7 +151,7 @@ void run_irlba_deferred(
 
 template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector_>
 void run_sparse(
-    const tatami::Matrix<Value_, Index_>* mat, 
+    const tatami::Matrix<Value_, Index_>& mat, 
     int rank,
     const SimplePcaOptions& options,
     EigenMatrix_& components, 
@@ -161,21 +161,21 @@ void run_sparse(
     EigenVector_& scale_v,
     typename EigenVector_::Scalar& total_var)
 {
-    Index_ ngenes = mat->nrow();
+    Index_ ngenes = mat.nrow();
     center_v.resize(ngenes);
     scale_v.resize(ngenes);
 
     if (options.realize_matrix) {
         // 'extracted' contains row-major contents...
         auto extracted = tatami::retrieve_compressed_sparse_contents<Value_, Index_>(
-            mat, 
+            &mat, 
             /* row = */ true, 
             /* two_pass = */ false, 
             /* threads = */ options.num_threads
         );
 
         // But we effectively transpose it to CSC with genes in columns.
-        Index_ ncells = mat->ncol();
+        Index_ ncells = mat.ncol();
         irlba::ParallelSparseMatrix emat(
             ncells,
             ngenes,
@@ -219,7 +219,7 @@ void run_sparse(
 
 template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector_>
 void run_dense(
-    const tatami::Matrix<Value_, Index_>* mat, 
+    const tatami::Matrix<Value_, Index_>& mat, 
     int rank,
     const SimplePcaOptions& options,
     EigenMatrix_& components, 
@@ -229,18 +229,18 @@ void run_dense(
     EigenVector_& scale_v,
     typename EigenVector_::Scalar& total_var)
 {
-    Index_ ngenes = mat->nrow();
+    Index_ ngenes = mat.nrow();
     center_v.resize(ngenes);
     scale_v.resize(ngenes);
 
     if (options.realize_matrix) {
         // Create a matrix with genes in columns.
-        Index_ ncells = mat->ncol();
+        Index_ ncells = mat.ncol();
         EigenMatrix_ emat(ncells, ngenes);
 
         // If emat is row-major, we want to fill it with columns of 'mat', so row_major = false.
         // If emat is column-major, we want to fill it with rows of 'mat', so row_major = true.
-        tatami::convert_to_dense(mat, /* row_major = */ !emat.IsRowMajor, emat.data(), options.num_threads);
+        tatami::convert_to_dense(&mat, /* row_major = */ !emat.IsRowMajor, emat.data(), options.num_threads);
 
         center_v.array() = emat.array().colwise().sum();
         if (ncells) {
@@ -277,32 +277,6 @@ void run_dense(
             center_v, 
             scale_v
         );
-    }
-}
-
-template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector_>
-void dispatch(
-    const tatami::Matrix<Value_, Index_>* mat, 
-    int rank, 
-    const SimplePcaOptions& options,
-    EigenMatrix_& components, 
-    EigenMatrix_& rotation, 
-    EigenVector_& variance_explained, 
-    EigenVector_& center_v,
-    EigenVector_& scale_v,
-    typename EigenVector_::Scalar& total_var) 
-{
-    irlba::EigenThreadScope t(options.num_threads);
-
-    if (mat->sparse()) {
-        run_sparse(mat, rank, options, components, rotation, variance_explained, center_v, scale_v, total_var);
-    } else {
-        run_dense(mat, rank, options, components, rotation, variance_explained, center_v, scale_v, total_var);
-    }
-
-    internal::clean_up(mat->ncol(), components, variance_explained);
-    if (options.transpose) {
-        components.adjointInPlace();
     }
 }
 
@@ -369,7 +343,7 @@ struct SimplePcaResults {
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  *
- * @param[in] mat Pointer to the input matrix.
+ * @param[in] mat The input expression matrix.
  * Columns should contain cells while rows should contain genes.
  * @param rank Number of PCs to compute.
  * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
@@ -379,8 +353,20 @@ struct SimplePcaResults {
  * This can be re-used across multiple calls to `simple_pca()`. 
  */
 template<typename Value_, typename Index_, typename EigenMatrix_, class EigenVector_>
-void simple_pca(const tatami::Matrix<Value_, Index_>* mat, int rank, const SimplePcaOptions& options, SimplePcaResults<EigenMatrix_, EigenVector_>& output) {
-    internal::dispatch(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+void simple_pca(const tatami::Matrix<Value_, Index_>& mat, int rank, const SimplePcaOptions& options, SimplePcaResults<EigenMatrix_, EigenVector_>& output) {
+    irlba::EigenThreadScope t(options.num_threads);
+
+    if (mat.sparse()) {
+        internal::run_sparse(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+    } else {
+        internal::run_dense(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+    }
+
+    internal::clean_up(mat.ncol(), output.components, output.variance_explained);
+    if (options.transpose) {
+        output.components.adjointInPlace();
+    }
+
     if (!options.scale) {
         output.scale = EigenVector_();
     }
@@ -394,7 +380,7 @@ void simple_pca(const tatami::Matrix<Value_, Index_>* mat, int rank, const Simpl
  * @tparam Value_ Type of the matrix data.
  * @tparam Index_ Integer type for the indices.
  *
- * @param[in] mat Pointer to the input matrix.
+ * @param[in] mat The input expression matrix.
  * Columns should contain cells while rows should contain genes.
  * @param rank Number of PCs to compute.
  * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
@@ -404,9 +390,9 @@ void simple_pca(const tatami::Matrix<Value_, Index_>* mat, int rank, const Simpl
  * @return Results of the PCA.
  */
 template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_, typename Index_>
-SimplePcaResults<EigenMatrix_, EigenVector_> simple_pca(const tatami::Matrix<Value_, Index_>* mat, int rank, const SimplePcaOptions& options) {
+SimplePcaResults<EigenMatrix_, EigenVector_> simple_pca(const tatami::Matrix<Value_, Index_>& mat, int rank, const SimplePcaOptions& options) {
     SimplePcaResults<EigenMatrix_, EigenVector_> output;
-    internal::dispatch(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+    simple_pca(mat, rank, options, output);
     return output;
 }
 
