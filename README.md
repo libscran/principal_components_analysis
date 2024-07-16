@@ -16,7 +16,7 @@ factored out into a separate C++ library for easier re-use.
 Given a [`tatami::Matrix`](https://github.com/tatami-inc/tatami), the `simple_pca::compute()` function will compute the PCA to obtain a low-dimensional representation of the cells:
 
 ```cpp
-#include "scran/simple_pca.hpp"
+#include "scran_pca/scran_pca.hpp"
 
 const tatami::Matrix<double, int>& mat = some_data_source();
 
