@@ -12,6 +12,13 @@
 <link href="search/search.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="search/searchdata.js"></script>
 <script type="text/javascript" src="search/search.js"></script>
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  extensions: ["tex2jax.js"],
+  jax: ["input/TeX","output/HTML-CSS"],
+});
+</script>
+<script type="text/javascript" async="async" src="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js"></script>
 <link href="doxygen.css" rel="stylesheet" type="text/css" />
 <link href="doxygen-awesome.css" rel="stylesheet" type="text/css"/>
 </head>
@@ -167,7 +174,7 @@ template&lt;typename EigenMatrix_  = Eigen::MatrixXd, class EigenVector_  = Eige
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramdir">[in]</td><td class="paramname">mat</td><td>Input expression matrix. Columns should contain cells while rows should contain genes. </td></tr>
-    <tr><td class="paramdir">[in]</td><td class="paramname">block</td><td>Pointer to an array of length equal to the number of cells, containing the block assignment for each cell. Each assignment should be an integer in <picture><source srcset="form_0_dark.png" media="(prefers-color-scheme: dark)"/><img class="formulaInl" alt="$[0, N)$" src="form_0.png"/></picture> where <picture><source srcset="form_1_dark.png" media="(prefers-color-scheme: dark)"/><img class="formulaInl" alt="$N$" src="form_1.png"/></picture> is the number of blocks. </td></tr>
+    <tr><td class="paramdir">[in]</td><td class="paramname">block</td><td>Pointer to an array of length equal to the number of cells, containing the block assignment for each cell. Each assignment should be an integer in \([0, N)\) where \(N\) is the number of blocks. </td></tr>
     <tr><td class="paramdir"></td><td class="paramname">rank</td><td>Number of PCs to compute. This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix; otherwise, only the maximum number of PCs will be reported in the results. </td></tr>
     <tr><td class="paramdir"></td><td class="paramname">options</td><td>Further options.</td></tr>
   </table>
@@ -238,7 +245,7 @@ template&lt;typename Value_ , typename Index_ , typename Block_ , typename Eigen
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramdir">[in]</td><td class="paramname">mat</td><td>Input expression matrix. Columns should contain cells while rows should contain genes. </td></tr>
-    <tr><td class="paramdir">[in]</td><td class="paramname">block</td><td>Pointer to an array of length equal to the number of cells, containing the block assignment for each cell. Each assignment should be an integer in <picture><source srcset="form_0_dark.png" media="(prefers-color-scheme: dark)"/><img class="formulaInl" alt="$[0, N)$" src="form_0.png"/></picture> where <picture><source srcset="form_1_dark.png" media="(prefers-color-scheme: dark)"/><img class="formulaInl" alt="$N$" src="form_1.png"/></picture> is the number of blocks. </td></tr>
+    <tr><td class="paramdir">[in]</td><td class="paramname">block</td><td>Pointer to an array of length equal to the number of cells, containing the block assignment for each cell. Each assignment should be an integer in \([0, N)\) where \(N\) is the number of blocks. </td></tr>
     <tr><td class="paramdir"></td><td class="paramname">rank</td><td>Number of PCs to compute. This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix; otherwise, only the maximum number of PCs will be reported in the results. </td></tr>
     <tr><td class="paramdir"></td><td class="paramname">options</td><td>Further options. </td></tr>
     <tr><td class="paramdir">[out]</td><td class="paramname">output</td><td>On output, the results of the PCA on the residuals. This can be re-used across multiple calls to <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>. </td></tr>
