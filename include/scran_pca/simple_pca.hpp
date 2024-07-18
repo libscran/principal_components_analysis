@@ -336,7 +336,7 @@ struct SimplePcaResults {
  * Principal components analysis (PCA) is a helpful technique for data compression and denoising.
  * The idea is that the earlier PCs capture most of the systematic biological variation while the later PCs capture random technical noise.
  * Thus, we can reduce the size of the data and eliminate noise by only using the earlier PCs for further analyses.
- * Most practitioners will keep the first 10-50 PCs, though the exact choice is fairly arbitrary. *
+ * Most practitioners will keep the first 10-50 PCs, though the exact choice is fairly arbitrary.
  *
  * @tparam Value_ Type of the matrix data.
  * @tparam Index_ Integer type for the indices.

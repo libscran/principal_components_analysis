@@ -36,7 +36,7 @@ Advanced users can fiddle with the options:
 opt.scale = true;
 opt.num_threads = 4;
 opt.realize_matrix = false;
-auto res2 = scran::simple_pca::compute(ptr, 20, opt);
+auto res2 = scran_pca::simple_pca(mat, 20, opt);
 ```
 
 In the presence of multiple blocks, we can perform the PCA on the residuals after regressing out the blocking factor.
