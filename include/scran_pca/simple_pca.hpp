@@ -33,6 +33,13 @@ struct SimplePcaOptions {
      * @endcond
      */
 
+    /** 
+     * Number of PCs to compute.
+     * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
+     * otherwise, only the maximum number of PCs will be reported in the results.
+     */
+    int number = 25;
+
     /**
      * Should genes be scaled to unit variance?
      * Genes with zero variance are ignored.
@@ -132,7 +139,6 @@ void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>& mat, 
 template<class IrlbaMatrix_, class EigenMatrix_, class EigenVector_>
 void run_irlba_deferred(
     const IrlbaMatrix_& mat,
-    int rank,
     const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
@@ -143,16 +149,15 @@ void run_irlba_deferred(
     irlba::Centered<IrlbaMatrix_, EigenVector_> centered(mat, center_v);
     if (options.scale) {
         irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, true);
-        irlba::compute(scaled, rank, components, rotation, variance_explained, options.irlba_options);
+        irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
     } else {
-        irlba::compute(centered, rank, components, rotation, variance_explained, options.irlba_options);
+        irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
     }
 }
 
 template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector_>
 void run_sparse(
     const tatami::Matrix<Value_, Index_>& mat, 
-    int rank,
     const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
@@ -199,14 +204,13 @@ void run_sparse(
         }, ngenes, options.num_threads);
 
         total_var = internal::process_scale_vector(options.scale, scale_v);
-        run_irlba_deferred(emat, rank, options, components, rotation, variance_explained, center_v, scale_v);
+        run_irlba_deferred(emat, options, components, rotation, variance_explained, center_v, scale_v);
 
     } else {
         compute_row_means_and_variances<true>(mat, options.num_threads, center_v, scale_v);
         total_var = internal::process_scale_vector(options.scale, scale_v);
         run_irlba_deferred(
             internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
-            rank, 
             options, 
             components, 
             rotation, 
@@ -220,7 +224,6 @@ void run_sparse(
 template<typename Value_, typename Index_, class EigenMatrix_, class EigenVector_>
 void run_dense(
     const tatami::Matrix<Value_, Index_>& mat, 
-    int rank,
     const SimplePcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
@@ -262,14 +265,13 @@ void run_dense(
             emat.array().rowwise() /= scale_v.adjoint().array();
         }
 
-        irlba::compute(emat, rank, components, rotation, variance_explained, options.irlba_options);
+        irlba::compute(emat, options.number, components, rotation, variance_explained, options.irlba_options);
 
     } else {
         compute_row_means_and_variances<false>(mat, options.num_threads, center_v, scale_v);
         total_var = internal::process_scale_vector(options.scale, scale_v);
         run_irlba_deferred(
             internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
-            rank, 
             options, 
             components, 
             rotation, 
@@ -296,7 +298,7 @@ struct SimplePcaResults {
      * Matrix of principal components.
      * By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix.
      * If `SimplePcaOptions::transpose = false`, rows are cells instead.
-     * The number of PCs is determined by the `rank` used in `simple_pca()`.
+     * The number of PCs is determined by `SimplePcaOptions::number`. 
      */
     EigenMatrix_ components;
 
@@ -315,7 +317,7 @@ struct SimplePcaResults {
     /**
      * Rotation matrix. 
      * Each row corresponds to a feature while each column corresponds to a PC.
-     * The number of PCs is determined by the `rank` used in `simple_pca()`.
+     * The number of PCs is determined by `SimplePcaOptions::number`.
      */
     EigenMatrix_ rotation;
 
@@ -345,21 +347,18 @@ struct SimplePcaResults {
  *
  * @param[in] mat The input expression matrix.
  * Columns should contain cells while rows should contain genes.
- * @param rank Number of PCs to compute.
- * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
- * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  * @param[out] output On output, the results of the PCA on `mat`.
  * This can be re-used across multiple calls to `simple_pca()`. 
  */
 template<typename Value_, typename Index_, typename EigenMatrix_, class EigenVector_>
-void simple_pca(const tatami::Matrix<Value_, Index_>& mat, int rank, const SimplePcaOptions& options, SimplePcaResults<EigenMatrix_, EigenVector_>& output) {
+void simple_pca(const tatami::Matrix<Value_, Index_>& mat, const SimplePcaOptions& options, SimplePcaResults<EigenMatrix_, EigenVector_>& output) {
     irlba::EigenThreadScope t(options.num_threads);
 
     if (mat.sparse()) {
-        internal::run_sparse(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+        internal::run_sparse(mat, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
     } else {
-        internal::run_dense(mat, rank, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+        internal::run_dense(mat, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
     }
 
     internal::clean_up(mat.ncol(), output.components, output.variance_explained);
@@ -382,17 +381,14 @@ void simple_pca(const tatami::Matrix<Value_, Index_>& mat, int rank, const Simpl
  *
  * @param[in] mat The input expression matrix.
  * Columns should contain cells while rows should contain genes.
- * @param rank Number of PCs to compute.
- * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
- * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  *
  * @return Results of the PCA.
  */
 template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_, typename Index_>
-SimplePcaResults<EigenMatrix_, EigenVector_> simple_pca(const tatami::Matrix<Value_, Index_>& mat, int rank, const SimplePcaOptions& options) {
+SimplePcaResults<EigenMatrix_, EigenVector_> simple_pca(const tatami::Matrix<Value_, Index_>& mat, const SimplePcaOptions& options) {
     SimplePcaResults<EigenMatrix_, EigenVector_> output;
-    simple_pca(mat, rank, options, output);
+    simple_pca(mat, options, output);
     return output;
 }
 

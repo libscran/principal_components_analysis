@@ -35,6 +35,13 @@ struct BlockedPcaOptions {
      */
 
     /**
+     * Number of principal components (PCs) to compute.
+     * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
+     * otherwise, only the maximum number of PCs will be reported in the results.
+     */
+    int number = 25;
+
+    /**
      * Should genes be scaled to unit variance?
      * Genes with zero variance are ignored.
      */
@@ -749,7 +756,6 @@ void run_blocked(
     const tatami::Matrix<Value_, Index_>& mat, 
     const Block_* block, 
     const BlockingDetails<Index_, EigenVector_>& block_details, 
-    int rank,
     const BlockedPcaOptions& options,
     EigenMatrix_& components, 
     EigenMatrix_& rotation, 
@@ -796,10 +802,10 @@ void run_blocked(
         if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
             irlba::Scaled<false, decltype(scaled), EigenVector_> weighted(scaled, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
+            irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
         } else {
             irlba::Scaled<false, decltype(centered), EigenVector_> weighted(centered, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, rank, components, rotation, variance_explained, options.irlba_options);
+            irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
         }
 
         EigenMatrix_ tmp;
@@ -830,9 +836,9 @@ void run_blocked(
     } else {
         if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
-            irlba::compute(scaled, rank, components, rotation, variance_explained, options.irlba_options);
+            irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
         } else {
-            irlba::compute(centered, rank, components, rotation, variance_explained, options.irlba_options);
+            irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
         }
 
         if (options.components_from_residuals) {
@@ -878,13 +884,14 @@ struct BlockedPcaResults {
      * Matrix of principal components.
      * By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix.
      * If `BlockedPcaOptions::transpose = false`, rows are cells instead.
-     * The number of PCs is determined by the `rank` used in `blocked_pca()`.
+     * The number of PCs is determined by `BlockedPcaOptions::number`. 
      */
     EigenMatrix_ components;
 
     /**
      * Variance explained by each PC.
      * Each entry corresponds to a column in `components` and is in decreasing order.
+     * The length of the vector is determined by `BlockedPcaOptions::number`. 
      */
     EigenVector_ variance_explained;
 
@@ -897,7 +904,7 @@ struct BlockedPcaResults {
     /**
      * Rotation matrix.
      * Each row corresponds to a gene while each column corresponds to a PC.
-     * The number of PCs is determined by the `rank` used in `blocked_pca()`.
+     * The number of PCs is determined by `BlockedPcaOptions::number`. 
      */
     EigenMatrix_ rotation;
 
@@ -952,15 +959,12 @@ struct BlockedPcaResults {
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
  * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
- * @param rank Number of PCs to compute.
- * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
- * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  * @param[out] output On output, the results of the PCA on the residuals. 
  * This can be re-used across multiple calls to `blocked_pca()`. 
  */
 template<typename Value_, typename Index_, typename Block_, typename EigenMatrix_, class EigenVector_>
-void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block, int rank, const BlockedPcaOptions& options, BlockedPcaResults<EigenMatrix_, EigenVector_>& output) {
+void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block, const BlockedPcaOptions& options, BlockedPcaResults<EigenMatrix_, EigenVector_>& output) {
     irlba::EigenThreadScope t(options.num_threads);
     auto bdetails = internal::compute_blocking_details<EigenVector_>(mat.ncol(), block, options.block_weight_policy, options.variable_block_weight_parameters);
 
@@ -973,15 +977,15 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block,
 
     if (mat.sparse()) {
         if (options.realize_matrix) {
-            internal::run_blocked<true, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<true, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         } else {
-            internal::run_blocked<false, true>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<false, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
     } else {
         if (options.realize_matrix) {
-            internal::run_blocked<true, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<true, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         } else {
-            internal::run_blocked<false, false>(mat, block, bdetails, rank, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<false, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
         }
     }
 
@@ -1004,17 +1008,14 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block,
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
  * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
- * @param rank Number of PCs to compute.
- * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
- * otherwise, only the maximum number of PCs will be reported in the results.
  * @param options Further options.
  *
  * @return Results of the PCA on the residuals. 
  */
 template<typename EigenMatrix_ = Eigen::MatrixXd, class EigenVector_ = Eigen::VectorXd, typename Value_, typename Index_, typename Block_>
-BlockedPcaResults<EigenMatrix_, EigenVector_> blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block, int rank, const BlockedPcaOptions& options) {
+BlockedPcaResults<EigenMatrix_, EigenVector_> blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block, const BlockedPcaOptions& options) {
     BlockedPcaResults<EigenMatrix_, EigenVector_> output;
-    blocked_pca(mat, block, rank, options, output);
+    blocked_pca(mat, block, options, output);
     return output;
 }
 

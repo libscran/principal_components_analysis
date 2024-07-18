@@ -22,7 +22,8 @@ const tatami::Matrix<double, int>& mat = some_data_source();
 
 // Take the top 20 PCs:
 scran_pca::SimplePcaOptions opt;
-auto res = scran_pca::simple_pca(mat, 20, opt);
+opt.rank = 20;
+auto res = scran_pca::simple_pca(mat, opt);
 
 res.components; // rows are PCs, columns are cells.
 res.rotation; // rows are genes, columns correspond to PCs.
@@ -30,13 +31,13 @@ res.variance_explained; // one per PC, in decreasing order.
 res.total_variance; // total variance in the dataset.
 ```
 
-Advanced users can fiddle with the options:
+Advanced users can fiddle with more of the options:
 
 ```cpp
 opt.scale = true;
 opt.num_threads = 4;
 opt.realize_matrix = false;
-auto res2 = scran_pca::simple_pca(mat, 20, opt);
+auto res2 = scran_pca::simple_pca(mat, opt);
 ```
 
 In the presence of multiple blocks, we can perform the PCA on the residuals after regressing out the blocking factor.
@@ -46,7 +47,8 @@ This ensures that the inter-block differences do not contribute to the first few
 std::vector<int> blocks = some_blocks();
 
 scran_pca::BlockedPcaOptions bopt;
-auto bres = scran_pca::blocked_pca(mat, blocks.data(), 20, bopt);
+bopt.rank = 10; // taking the top 10 PCs this time.
+auto bres = scran_pca::blocked_pca(mat, blocks.data(), bopt);
 
 bres.components; // rows are PCs, columns are cells.
 bres.center; // rows are blocks, columns are genes.
@@ -59,7 +61,7 @@ we can use `scran_pca::blocked_pca()` to obtain an appropriate matrix that focus
 
 ```cpp
 bopt.components_from_residuals = false;
-auto bres2 = scran_pca::blocked_pca(mat, blocks.data(), 20, bopt);
+auto bres2 = scran_pca::blocked_pca(mat, blocks.data(), bopt);
 ```
 
 Check out the [reference documentation](https://libscran.github.io/scran_pca) for more details.
