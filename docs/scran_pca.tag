@@ -28,6 +28,13 @@
     <name>scran_pca::BlockedPcaOptions</name>
     <filename>structscran__pca_1_1BlockedPcaOptions.html</filename>
     <member kind="variable">
+      <type>int</type>
+      <name>number</name>
+      <anchorfile>structscran__pca_1_1BlockedPcaOptions.html</anchorfile>
+      <anchor>aae8f4926b3d8e11588565fa82be60cbd</anchor>
+      <arglist></arglist>
+    </member>
+    <member kind="variable">
       <type>bool</type>
       <name>scale</name>
       <anchorfile>structscran__pca_1_1BlockedPcaOptions.html</anchorfile>
@@ -136,6 +143,13 @@
     <name>scran_pca::SimplePcaOptions</name>
     <filename>structscran__pca_1_1SimplePcaOptions.html</filename>
     <member kind="variable">
+      <type>int</type>
+      <name>number</name>
+      <anchorfile>structscran__pca_1_1SimplePcaOptions.html</anchorfile>
+      <anchor>af99a561e7aa50311bd05ea59802cc492</anchor>
+      <arglist></arglist>
+    </member>
+    <member kind="variable">
       <type>bool</type>
       <name>scale</name>
       <anchorfile>structscran__pca_1_1SimplePcaOptions.html</anchorfile>
@@ -230,29 +244,29 @@
       <type>void</type>
       <name>simple_pca</name>
       <anchorfile>namespacescran__pca.html</anchorfile>
-      <anchor>a8bb03efc0b17f40914481039ec1f25c0</anchor>
-      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, int rank, const SimplePcaOptions &amp;options, SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt; &amp;output)</arglist>
+      <anchor>afbe9b43fbd114829551a10897067905c</anchor>
+      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const SimplePcaOptions &amp;options, SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt; &amp;output)</arglist>
     </member>
     <member kind="function">
       <type>SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt;</type>
       <name>simple_pca</name>
       <anchorfile>namespacescran__pca.html</anchorfile>
-      <anchor>a0c0d71c595c8659a0167dd11fe5f86ff</anchor>
-      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, int rank, const SimplePcaOptions &amp;options)</arglist>
+      <anchor>a91b16a98870f1d46939c2a07c60e6156</anchor>
+      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const SimplePcaOptions &amp;options)</arglist>
     </member>
     <member kind="function">
       <type>void</type>
       <name>blocked_pca</name>
       <anchorfile>namespacescran__pca.html</anchorfile>
-      <anchor>ac0670ebef2b278df686dee3735a3184e</anchor>
-      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const Block_ *block, int rank, const BlockedPcaOptions &amp;options, BlockedPcaResults&lt; EigenMatrix_, EigenVector_ &gt; &amp;output)</arglist>
+      <anchor>a41ce273ad9e5faaa398afd5dceb88500</anchor>
+      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const Block_ *block, const BlockedPcaOptions &amp;options, BlockedPcaResults&lt; EigenMatrix_, EigenVector_ &gt; &amp;output)</arglist>
     </member>
     <member kind="function">
       <type>BlockedPcaResults&lt; EigenMatrix_, EigenVector_ &gt;</type>
       <name>blocked_pca</name>
       <anchorfile>namespacescran__pca.html</anchorfile>
-      <anchor>afda11648e2deef18a0044e7e960c5d8d</anchor>
-      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const Block_ *block, int rank, const BlockedPcaOptions &amp;options)</arglist>
+      <anchor>a1d13627678bf5f96d522fcf82400a213</anchor>
+      <arglist>(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const Block_ *block, const BlockedPcaOptions &amp;options)</arglist>
     </member>
   </compound>
   <compound kind="page">

@@ -7,7 +7,7 @@ var searchData=
   ['scran_5fpca_4',['scran_pca',['../namespacescran__pca.html',1,'']]],
   ['scran_5fpca_2ehpp_5',['scran_pca.hpp',['../scran__pca_8hpp.html',1,'']]],
   ['seed_6',['seed',['https://ltla.github.io/CppIrlba/structirlba_1_1Options.html#a4252ea1bbebe8ad2a7541c1edb2699e2',1,'irlba::Options']]],
-  ['simple_5fpca_7',['simple_pca',['../namespacescran__pca.html#a0c0d71c595c8659a0167dd11fe5f86ff',1,'scran_pca::simple_pca(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, int rank, const SimplePcaOptions &amp;options)'],['../namespacescran__pca.html#a8bb03efc0b17f40914481039ec1f25c0',1,'scran_pca::simple_pca(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, int rank, const SimplePcaOptions &amp;options, SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt; &amp;output)']]],
+  ['simple_5fpca_7',['simple_pca',['../namespacescran__pca.html#a91b16a98870f1d46939c2a07c60e6156',1,'scran_pca::simple_pca(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const SimplePcaOptions &amp;options)'],['../namespacescran__pca.html#afbe9b43fbd114829551a10897067905c',1,'scran_pca::simple_pca(const tatami::Matrix&lt; Value_, Index_ &gt; &amp;mat, const SimplePcaOptions &amp;options, SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt; &amp;output)']]],
   ['simple_5fpca_2ehpp_8',['simple_pca.hpp',['../simple__pca_8hpp.html',1,'']]],
   ['simplepcaoptions_9',['SimplePcaOptions',['../structscran__pca_1_1SimplePcaOptions.html',1,'scran_pca']]],
   ['simplepcaresults_10',['SimplePcaResults',['../structscran__pca_1_1SimplePcaResults.html',1,'scran_pca']]],

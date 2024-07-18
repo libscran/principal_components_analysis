@@ -31,7 +31,7 @@ MathJax.Hub.Config({
   <td id="projectalign">
    <div id="projectname">scran_pca
    </div>
-   <div id="projectbrief">PCA for single-cell data</div>
+   <div id="projectbrief">Principal component analysis for single-cell data</div>
   </td>
  </tr>
  </tbody>
@@ -89,13 +89,15 @@ $(function() {
 </div><!--header-->
 <div class="contents">
 
-<p>Options for <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>.  
+<p>Options for <code><a class="el" href="namespacescran__pca.html#a41ce273ad9e5faaa398afd5dceb88500">blocked_pca()</a></code>.  
  <a href="structscran__pca_1_1BlockedPcaOptions.html#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="blocked__pca_8hpp_source.html">blocked_pca.hpp</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
+<tr class="memitem:aae8f4926b3d8e11588565fa82be60cbd" id="r_aae8f4926b3d8e11588565fa82be60cbd"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#aae8f4926b3d8e11588565fa82be60cbd">number</a> = 25</td></tr>
+<tr class="separator:aae8f4926b3d8e11588565fa82be60cbd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abd67f8510e403f541b6275e34f5ad61b" id="r_abd67f8510e403f541b6275e34f5ad61b"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#abd67f8510e403f541b6275e34f5ad61b">scale</a> = false</td></tr>
 <tr class="separator:abd67f8510e403f541b6275e34f5ad61b"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a65498bbdde95073a362a51e942de4fe5" id="r_a65498bbdde95073a362a51e942de4fe5"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#a65498bbdde95073a362a51e942de4fe5">transpose</a> = true</td></tr>
@@ -114,7 +116,7 @@ Public Attributes</h2></td></tr>
 <tr class="separator:a4e3ca5a977c555fdf742b8a5373a0417"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Options for <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>. </p>
+<div class="textblock"><p>Options for <code><a class="el" href="namespacescran__pca.html#a41ce273ad9e5faaa398afd5dceb88500">blocked_pca()</a></code>. </p>
 </div><h2 class="groupheader">Member Data Documentation</h2>
 <a id="aa5ac168e8a3384d0fde25a966db0bdac" name="aa5ac168e8a3384d0fde25a966db0bdac"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa5ac168e8a3384d0fde25a966db0bdac">&#9670;&#160;</a></span>block_weight_policy</h2>
@@ -173,6 +175,21 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <p>Number of threads to use. </p>
+
+</div>
+</div>
+<a id="aae8f4926b3d8e11588565fa82be60cbd" name="aae8f4926b3d8e11588565fa82be60cbd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aae8f4926b3d8e11588565fa82be60cbd">&#9670;&#160;</a></span>number</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int scran_pca::BlockedPcaOptions::number = 25</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Number of principal components (PCs) to compute. This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix; otherwise, only the maximum number of PCs will be reported in the results. </p>
 
 </div>
 </div>

@@ -31,7 +31,7 @@ MathJax.Hub.Config({
   <td id="projectalign">
    <div id="projectname">scran_pca
    </div>
-   <div id="projectbrief">PCA for single-cell data</div>
+   <div id="projectbrief">Principal component analysis for single-cell data</div>
   </td>
  </tr>
  </tbody>
@@ -89,7 +89,7 @@ $(function() {
 </div><!--header-->
 <div class="contents">
 
-<p>Results of <code><a class="el" href="namespacescran__pca.html#a8bb03efc0b17f40914481039ec1f25c0">simple_pca()</a></code>.  
+<p>Results of <code><a class="el" href="namespacescran__pca.html#afbe9b43fbd114829551a10897067905c">simple_pca()</a></code>.  
  <a href="structscran__pca_1_1SimplePcaResults.html#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="simple__pca_8hpp_source.html">simple_pca.hpp</a>&gt;</code></p>
@@ -111,7 +111,7 @@ Public Attributes</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename EigenMatrix_, typename EigenVector_&gt;<br />
-struct scran_pca::SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt;</div><p>Results of <code><a class="el" href="namespacescran__pca.html#a8bb03efc0b17f40914481039ec1f25c0">simple_pca()</a></code>. </p>
+struct scran_pca::SimplePcaResults&lt; EigenMatrix_, EigenVector_ &gt;</div><p>Results of <code><a class="el" href="namespacescran__pca.html#afbe9b43fbd114829551a10897067905c">simple_pca()</a></code>. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">EigenMatrix_</td><td>A floating-point <code>Eigen::Matrix</code> class. </td></tr>
@@ -150,7 +150,7 @@ template&lt;typename EigenMatrix_ , typename EigenVector_ &gt; </div>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Matrix of principal components. By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix. If <code><a class="el" href="structscran__pca_1_1SimplePcaOptions.html#a45a65fc15d15e95becb8166f09b0c6fa">SimplePcaOptions::transpose</a> = false</code>, rows are cells instead. The number of PCs is determined by the <code>rank</code> used in <code><a class="el" href="namespacescran__pca.html#a8bb03efc0b17f40914481039ec1f25c0">simple_pca()</a></code>. </p>
+<p>Matrix of principal components. By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix. If <code><a class="el" href="structscran__pca_1_1SimplePcaOptions.html#a45a65fc15d15e95becb8166f09b0c6fa">SimplePcaOptions::transpose</a> = false</code>, rows are cells instead. The number of PCs is determined by <code><a class="el" href="structscran__pca_1_1SimplePcaOptions.html#af99a561e7aa50311bd05ea59802cc492">SimplePcaOptions::number</a></code>. </p>
 
 </div>
 </div>
@@ -167,7 +167,7 @@ template&lt;typename EigenMatrix_ , typename EigenVector_ &gt; </div>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Rotation matrix. Each row corresponds to a feature while each column corresponds to a PC. The number of PCs is determined by the <code>rank</code> used in <code><a class="el" href="namespacescran__pca.html#a8bb03efc0b17f40914481039ec1f25c0">simple_pca()</a></code>. </p>
+<p>Rotation matrix. Each row corresponds to a feature while each column corresponds to a PC. The number of PCs is determined by <code><a class="el" href="structscran__pca_1_1SimplePcaOptions.html#af99a561e7aa50311bd05ea59802cc492">SimplePcaOptions::number</a></code>. </p>
 
 </div>
 </div>

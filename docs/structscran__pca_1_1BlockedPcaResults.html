@@ -31,7 +31,7 @@ MathJax.Hub.Config({
   <td id="projectalign">
    <div id="projectname">scran_pca
    </div>
-   <div id="projectbrief">PCA for single-cell data</div>
+   <div id="projectbrief">Principal component analysis for single-cell data</div>
   </td>
  </tr>
  </tbody>
@@ -89,7 +89,7 @@ $(function() {
 </div><!--header-->
 <div class="contents">
 
-<p>Results of <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>.  
+<p>Results of <code><a class="el" href="namespacescran__pca.html#a41ce273ad9e5faaa398afd5dceb88500">blocked_pca()</a></code>.  
  <a href="structscran__pca_1_1BlockedPcaResults.html#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="blocked__pca_8hpp_source.html">blocked_pca.hpp</a>&gt;</code></p>
@@ -111,7 +111,7 @@ Public Attributes</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename EigenMatrix_, typename EigenVector_&gt;<br />
-struct scran_pca::BlockedPcaResults&lt; EigenMatrix_, EigenVector_ &gt;</div><p>Results of <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>. </p>
+struct scran_pca::BlockedPcaResults&lt; EigenMatrix_, EigenVector_ &gt;</div><p>Results of <code><a class="el" href="namespacescran__pca.html#a41ce273ad9e5faaa398afd5dceb88500">blocked_pca()</a></code>. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">EigenMatrix_</td><td>A floating-point <code>Eigen::Matrix</code> class. </td></tr>
@@ -150,7 +150,7 @@ template&lt;typename EigenMatrix_ , typename EigenVector_ &gt; </div>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Matrix of principal components. By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix. If <code><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#a65498bbdde95073a362a51e942de4fe5">BlockedPcaOptions::transpose</a> = false</code>, rows are cells instead. The number of PCs is determined by the <code>rank</code> used in <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>. </p>
+<p>Matrix of principal components. By default, each row corresponds to a PC while each column corresponds to a cell in the input matrix. If <code><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#a65498bbdde95073a362a51e942de4fe5">BlockedPcaOptions::transpose</a> = false</code>, rows are cells instead. The number of PCs is determined by <code><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#aae8f4926b3d8e11588565fa82be60cbd">BlockedPcaOptions::number</a></code>. </p>
 
 </div>
 </div>
@@ -167,7 +167,7 @@ template&lt;typename EigenMatrix_ , typename EigenVector_ &gt; </div>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Rotation matrix. Each row corresponds to a gene while each column corresponds to a PC. The number of PCs is determined by the <code>rank</code> used in <code><a class="el" href="namespacescran__pca.html#ac0670ebef2b278df686dee3735a3184e">blocked_pca()</a></code>. </p>
+<p>Rotation matrix. Each row corresponds to a gene while each column corresponds to a PC. The number of PCs is determined by <code><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#aae8f4926b3d8e11588565fa82be60cbd">BlockedPcaOptions::number</a></code>. </p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ template&lt;typename EigenMatrix_ , typename EigenVector_ &gt; </div>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Variance explained by each PC. Each entry corresponds to a column in <code>components</code> and is in decreasing order. </p>
+<p>Variance explained by each PC. Each entry corresponds to a column in <code>components</code> and is in decreasing order. The length of the vector is determined by <code><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#aae8f4926b3d8e11588565fa82be60cbd">BlockedPcaOptions::number</a></code>. </p>
 
 </div>
 </div>
