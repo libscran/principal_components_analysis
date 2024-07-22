@@ -538,7 +538,7 @@ inline void project_matrix_realized_sparse(
 }
 
 template<typename Value_, typename Index_, class EigenMatrix_>
-inline void project_matrix_transposed_tatami(
+void project_matrix_transposed_tatami(
     const tatami::Matrix<Value_, Index_>& mat, // genes in rows, cells in columns
     EigenMatrix_& components,
     const EigenMatrix_& scaled_rotation, // genes in rows, dims in columns
@@ -762,7 +762,8 @@ void run_blocked(
     EigenVector_& variance_explained, 
     EigenMatrix_& center_m,
     EigenVector_& scale_v,
-    typename EigenVector_::Scalar& total_var) 
+    typename EigenVector_::Scalar& total_var,
+    bool& converged)
 {
     Index_ ngenes = mat.nrow(), ncells = mat.ncol(); 
 
@@ -802,10 +803,12 @@ void run_blocked(
         if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
             irlba::Scaled<false, decltype(scaled), EigenVector_> weighted(scaled, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         } else {
             irlba::Scaled<false, decltype(centered), EigenVector_> weighted(centered, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         }
 
         EigenMatrix_ tmp;
@@ -836,9 +839,11 @@ void run_blocked(
     } else {
         if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
-            irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         } else {
-            irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         }
 
         if (options.components_from_residuals) {
@@ -920,6 +925,11 @@ struct BlockedPcaResults {
      * Each entry corresponds to a row in the input matrix and contains the scaling factor used to divide that gene's values if `BlockedPcaOptions::scale = true`.
      */
     EigenVector_ scale;
+
+    /**
+     * Whether the algorithm converged.
+     */
+    bool converged = false;
 };
 
 /**
@@ -974,18 +984,19 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block,
     EigenMatrix_& center_m = output.center;
     EigenVector_& scale_v = output.scale;
     auto& total_var = output.total_variance;
+    bool& converged = output.converged;
 
     if (mat.sparse()) {
         if (options.realize_matrix) {
-            internal::run_blocked<true, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<true, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         } else {
-            internal::run_blocked<false, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<false, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         }
     } else {
         if (options.realize_matrix) {
-            internal::run_blocked<true, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<true, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         } else {
-            internal::run_blocked<false, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<false, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         }
     }
 

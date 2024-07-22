@@ -137,7 +137,7 @@ void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>& mat, 
 }
 
 template<class IrlbaMatrix_, class EigenMatrix_, class EigenVector_>
-void run_irlba_deferred(
+auto run_irlba_deferred(
     const IrlbaMatrix_& mat,
     const SimplePcaOptions& options,
     EigenMatrix_& components, 
@@ -149,9 +149,9 @@ void run_irlba_deferred(
     irlba::Centered<IrlbaMatrix_, EigenVector_> centered(mat, center_v);
     if (options.scale) {
         irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, true);
-        irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
+        return irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
     } else {
-        irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
+        return irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
     }
 }
 
@@ -164,7 +164,8 @@ void run_sparse(
     EigenVector_& variance_explained,
     EigenVector_& center_v,
     EigenVector_& scale_v,
-    typename EigenVector_::Scalar& total_var)
+    typename EigenVector_::Scalar& total_var,
+    bool& converged)
 {
     Index_ ngenes = mat.nrow();
     center_v.resize(ngenes);
@@ -204,12 +205,13 @@ void run_sparse(
         }, ngenes, options.num_threads);
 
         total_var = internal::process_scale_vector(options.scale, scale_v);
-        run_irlba_deferred(emat, options, components, rotation, variance_explained, center_v, scale_v);
+        auto out = run_irlba_deferred(emat, options, components, rotation, variance_explained, center_v, scale_v);
+        converged = out.first;
 
     } else {
         compute_row_means_and_variances<true>(mat, options.num_threads, center_v, scale_v);
         total_var = internal::process_scale_vector(options.scale, scale_v);
-        run_irlba_deferred(
+        auto out = run_irlba_deferred(
             internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
             options, 
             components, 
@@ -218,6 +220,7 @@ void run_sparse(
             center_v, 
             scale_v
         );
+        converged = out.first;
     }
 }
 
@@ -230,7 +233,8 @@ void run_dense(
     EigenVector_& variance_explained, 
     EigenVector_& center_v,
     EigenVector_& scale_v,
-    typename EigenVector_::Scalar& total_var)
+    typename EigenVector_::Scalar& total_var,
+    bool& converged)
 {
     Index_ ngenes = mat.nrow();
     center_v.resize(ngenes);
@@ -265,12 +269,13 @@ void run_dense(
             emat.array().rowwise() /= scale_v.adjoint().array();
         }
 
-        irlba::compute(emat, options.number, components, rotation, variance_explained, options.irlba_options);
+        auto out = irlba::compute(emat, options.number, components, rotation, variance_explained, options.irlba_options);
+        converged = out.first;
 
     } else {
         compute_row_means_and_variances<false>(mat, options.num_threads, center_v, scale_v);
         total_var = internal::process_scale_vector(options.scale, scale_v);
-        run_irlba_deferred(
+        auto out = run_irlba_deferred(
             internal::TransposedTatamiWrapper<EigenVector_, Value_, Index_>(mat, options.num_threads), 
             options, 
             components, 
@@ -279,6 +284,7 @@ void run_dense(
             center_v, 
             scale_v
         );
+        converged = out.first;
     }
 }
 
@@ -332,6 +338,11 @@ struct SimplePcaResults {
      * Each entry corresponds to a row in the matrix and contains the scaling factor used to divide the feature values if `SimplePcaOptions::scale = true`.
      */
     EigenVector_ scale;
+
+    /**
+     * Whether the algorithm converged.
+     */
+    bool converged = false;
 };
 
 /**
@@ -356,9 +367,9 @@ void simple_pca(const tatami::Matrix<Value_, Index_>& mat, const SimplePcaOption
     irlba::EigenThreadScope t(options.num_threads);
 
     if (mat.sparse()) {
-        internal::run_sparse(mat, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+        internal::run_sparse(mat, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance, output.converged);
     } else {
-        internal::run_dense(mat, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance);
+        internal::run_dense(mat, options, output.components, output.rotation, output.variance_explained, output.center, output.scale, output.total_variance, output.converged);
     }
 
     internal::clean_up(mat.ncol(), output.components, output.variance_explained);
