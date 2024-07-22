@@ -138,6 +138,13 @@
       <anchor>a910c7e46f4cc53f12b9b15eea7170659</anchor>
       <arglist></arglist>
     </member>
+    <member kind="variable">
+      <type>bool</type>
+      <name>converged</name>
+      <anchorfile>structscran__pca_1_1BlockedPcaResults.html</anchorfile>
+      <anchor>a0ea80804052ad25021c71c2c506f2f32</anchor>
+      <arglist></arglist>
+    </member>
   </compound>
   <compound kind="struct">
     <name>scran_pca::SimplePcaOptions</name>
@@ -230,6 +237,13 @@
       <name>scale</name>
       <anchorfile>structscran__pca_1_1SimplePcaResults.html</anchorfile>
       <anchor>ad9f61059704fb822342fbb776cb66617</anchor>
+      <arglist></arglist>
+    </member>
+    <member kind="variable">
+      <type>bool</type>
+      <name>converged</name>
+      <anchorfile>structscran__pca_1_1SimplePcaResults.html</anchorfile>
+      <anchor>a3dd28009927a0546c3c4e6b5352c3150</anchor>
       <arglist></arglist>
     </member>
   </compound>
