@@ -933,7 +933,8 @@ struct BlockedPcaResults {
 };
 
 /**
- * In the presence of a blocking factor (e.g., batches, samples), we want to ensure that the PCA is not driven by uninteresting differences between blocks.
+ * As mentioned in `simple_pca()`, it is desirable to obtain the top PCs for downstream cell-based analyses.
+ * However, in the presence of a blocking factor (e.g., batches, samples), we want to ensure that the PCA is not driven by uninteresting differences between blocks.
  * To achieve this, `blocked_pca()` centers the expression of each gene in each blocking level and uses the residuals for PCA.
  * The gene-gene covariance matrix will thus focus on variation within each batch, 
  * ensuring that the top rotation vectors/principal components capture biological heterogeneity instead of inter-block differences.
