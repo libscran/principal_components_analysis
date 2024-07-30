@@ -8,7 +8,7 @@ FetchContent_MakeAvailable(scran_tests)
 
 enable_testing()
 
-set(CODE_COVERAGE OFF CACHE BOOL "Enable coverage testing")
+option(CODE_COVERAGE "Enable coverage testing" OFF)
 set(DO_CODE_COVERAGE OFF)
 if(CODE_COVERAGE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(DO_CODE_COVERAGE ON)
@@ -42,7 +42,7 @@ endmacro()
 create_test(libtest)
 
 find_package(OpenMP)
-if (USE_OPENMP)
+if (OpenMP_FOUND)
     create_test(omptest)
     target_link_libraries(omptest OpenMP::OpenMP_CXX)
 endif()
