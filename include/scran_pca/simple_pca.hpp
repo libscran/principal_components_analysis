@@ -8,7 +8,8 @@
 #include "Eigen/Dense"
 
 #include <vector>
-#include <cmath>
+#include <type_traits>
+#include <algorithm>
 
 #include "utils.hpp"
 
@@ -346,10 +347,11 @@ struct SimplePcaResults {
 };
 
 /**
- * Principal components analysis (PCA) is a helpful technique for data compression and denoising.
- * The premise is that most of the variation in the dataset is caused by real biology, as changes in pathway activity drive coordinated changes across genes.
- * In contrast, random technical noise is not synchronized across any one axis.
- * This suggests that the earlier principal components (PCs) should be enriched for biological heterogeneity while the later PCs capture random technical noise.
+ * Principal components analysis (PCA) for compression and denoising of single-cell expression data.
+ *
+ * The premise is that most of the variation in the dataset is driven by biology, as changes in pathway activity drive coordinated changes across multiple genes.
+ * In contrast, technical noise is random and not synchronized across any one axis in the high-dimensional space.
+ * This suggests that the earlier principal components (PCs) should be enriched for biological heterogeneity while the later PCs capture random noise.
  *
  * Our aim is to reduce the size of the data and reduce noise by only using the earlier PCs for downstream cell-based analyses (e.g., neighbor detection, clustering).
  * Most practitioners will keep the first 10-50 PCs, though the exact choice is fairly arbitrary - see `SimplePcaOptions::number` to specify the number of PCs.
@@ -360,8 +362,9 @@ struct SimplePcaResults {
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  *
- * @param[in] mat The input expression matrix.
+ * @param[in] mat The input matrix.
  * Columns should contain cells while rows should contain genes.
+ * Matrix entries are typically log-expression values.
  * @param options Further options.
  * @param[out] output On output, the results of the PCA on `mat`.
  * This can be re-used across multiple calls to `simple_pca()`. 
@@ -394,8 +397,9 @@ void simple_pca(const tatami::Matrix<Value_, Index_>& mat, const SimplePcaOption
  * @tparam Value_ Type of the matrix data.
  * @tparam Index_ Integer type for the indices.
  *
- * @param[in] mat The input expression matrix.
+ * @param[in] mat The input matrix.
  * Columns should contain cells while rows should contain genes.
+ * Matrix entries are typically log-expression values.
  * @param options Further options.
  *
  * @return Results of the PCA.

@@ -6,12 +6,12 @@
 
 /**
  * @file scran_pca.hpp
- * @brief Principal component analysis on single-cell data
+ * @brief Principal component analysis on single-cell data.
  */
 
 /**
  * @namespace scran_pca
- * @brief Principal component analysis on single-cell data
+ * @brief Principal component analysis on single-cell data.
  */
 namespace scran_pca {}
 

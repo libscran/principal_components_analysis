@@ -8,6 +8,8 @@
 
 #include <vector>
 #include <cmath>
+#include <algorithm>
+#include <type_traits>
 
 #include "scran_blocks/scran_blocks.hpp"
 #include "utils.hpp"
@@ -949,8 +951,8 @@ struct BlockedPcaResults {
  * Some of these methods accept a low-dimensional embedding of cells as input, which can be created by `blocked_pca()` with `BlockedPcaOptions::components_from_residuals = false`.
  * In this mode, only the rotation vectors are computed from the residuals.
  * The original expression values for each cell are then projected onto the associated subspace to obtain PC coordinates that can be used for further batch correction.
- * This approach aims to preserve the benefits of blocking to focus on intra-block biology instead of inter-block differences,
- * without making strong assumptions about the nature of those differences.
+ * This approach aims to avoid any strong assumptions about the nature of inter-block differences,
+ * while still leveraging the benefits of blocking to focus on intra-block biology.
  *
  * If one batch has many more cells than the others, it will dominate the PCA by driving the axes of maximum variance. 
  * This may mask interesting aspects of variation in the smaller batches.
@@ -965,8 +967,9 @@ struct BlockedPcaResults {
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  *
- * @param[in] mat Input expression matrix.
+ * @param[in] mat Input matrix.
  * Columns should contain cells while rows should contain genes.
+ * Matrix entries are typically log-expression values.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
  * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
@@ -1015,8 +1018,9 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block,
  * @tparam Index_ Integer type for the indices.
  * @tparam Block_ Integer type for the blocking factor.
  *
- * @param[in] mat Input expression matrix.
+ * @param[in] mat Input matrix.
  * Columns should contain cells while rows should contain genes.
+ * Matrix entries are typically log-expression values.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
  * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
