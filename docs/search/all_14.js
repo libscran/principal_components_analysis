@@ -4,7 +4,7 @@ var searchData=
   ['with_20tt_20fetchcontent_20tt_1',['CMake with &lt;tt&gt;FetchContent&lt;/tt&gt;',['../index.html#autotoc_md4',1,'']]],
   ['with_20tt_20find_5fpackage_20tt_2',['CMake with &lt;tt&gt;find_package()&lt;/tt&gt;',['../index.html#autotoc_md5',1,'']]],
   ['workspace_3',['workspace',['https://ltla.github.io/CppIrlba/structirlba_1_1MockMatrix_1_1Workspace.html',1,'irlba::MockMatrix::Workspace'],['https://ltla.github.io/CppIrlba/classirlba_1_1MockMatrix.html#aa303ff5b5b67746d84e58a06c679f29d',1,'irlba::MockMatrix::workspace()']]],
-  ['wrap_5fshared_5fptr_4',['wrap_shared_ptr',['https://tatami-inc.github.io/tatami/namespacetatami.html#a7518f5e8e09a6f6d7d3955b8ea286689',1,'tatami']]],
+  ['wrap_5fshared_5fptr_4',['wrap_shared_ptr',['https://tatami-inc.github.io/tatami/namespacetatami.html#ab008bae4e33a408de29e9fc49d0f902c',1,'tatami']]],
   ['wrap_5fshared_5fptr_2ehpp_5',['wrap_shared_ptr.hpp',['https://tatami-inc.github.io/tatami/wrap__shared__ptr_8hpp.html',1,'']]],
   ['wrapped_5fadjoint_5fmultiply_6',['wrapped_adjoint_multiply',['https://ltla.github.io/CppIrlba/namespaceirlba.html#a3459ae959a334ceffee832a4d854152a',1,'irlba']]],
   ['wrapped_5fadjoint_5fworkspace_7',['wrapped_adjoint_workspace',['https://ltla.github.io/CppIrlba/namespaceirlba.html#ad0e802556cc997916b3b02a074ae99e4',1,'irlba']]],
