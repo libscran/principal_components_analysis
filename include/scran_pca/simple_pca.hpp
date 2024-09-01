@@ -55,6 +55,7 @@ struct SimplePcaOptions {
 
     /**
      * Number of threads to use.
+     * The parallelization scheme is determined by `tatami::parallelize()` and `irlba::parallelize()`.
      */
     int num_threads = 1;
 

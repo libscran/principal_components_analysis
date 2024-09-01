@@ -81,6 +81,7 @@ struct BlockedPcaOptions {
 
     /**
      * Number of threads to use.
+     * The parallelization scheme is determined by `tatami::parallelize()` and `irlba::parallelize()`.
      */
     int num_threads = 1;
 
@@ -510,15 +511,7 @@ inline void project_matrix_realized_sparse(
     } else {
         const auto& row_nonzero_starts = emat.get_secondary_nonzero_starts();
 
-#ifndef IRLBA_CUSTOM_PARALLEL
-#ifdef _OPENMP
-        #pragma omp parallel for num_threads(nthreads)
-#endif
-        for (int t = 0; t < nthreads; ++t) {
-#else
-        IRLBA_CUSTOM_PARALLEL(nthreads, [&](size_t t) -> void { 
-#endif
-
+        irlba::parallelize(nthreads, [&](size_t t) -> void { 
             const auto& starts = row_nonzero_starts[t];
             const auto& ends = row_nonzero_starts[t + 1];
             Eigen::VectorXd multipliers(rank);
@@ -530,12 +523,7 @@ inline void project_matrix_realized_sparse(
                     components.col(i[s]).noalias() += x[s] * multipliers;
                 }
             }
-
-#ifndef IRLBA_CUSTOM_PARALLEL
-        }
-#else
         });
-#endif
     }
 }
 
