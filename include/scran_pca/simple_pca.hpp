@@ -105,7 +105,7 @@ void compute_row_means_and_variances(const tatami::Matrix<Value_, Index_>& mat, 
         tatami::parallelize([&](size_t t, Index_ start, Index_ length) -> void {
             tatami::Options opt;
             auto ncells = mat.ncol();
-            auto ext = tatami::consecutive_extractor<sparse_>(&mat, false, 0, ncells, start, length, opt);
+            auto ext = tatami::consecutive_extractor<sparse_>(&mat, false, static_cast<Index_>(0), ncells, start, length, opt);
 
             typedef typename EigenVector_::Scalar Scalar;
             tatami_stats::LocalOutputBuffer<Scalar> cbuffer(t, start, length, center_v.data());
