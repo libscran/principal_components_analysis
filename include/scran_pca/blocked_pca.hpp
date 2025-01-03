@@ -38,8 +38,8 @@ struct BlockedPcaOptions {
 
     /**
      * Number of principal components (PCs) to compute.
-     * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix;
-     * otherwise, only the maximum number of PCs will be reported in the results.
+     * This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix, otherwise an error will be thrown.
+     * (This error can be avoided by setting `irlba::Options::cap_number = true` in `BlockedPcaOptions::irlba_options`, in which case only the maximum number of PCs will be reported in the results.)
      */
     int number = 25;
 
