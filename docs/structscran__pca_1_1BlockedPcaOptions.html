@@ -189,7 +189,7 @@ Public Attributes</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>Number of principal components (PCs) to compute. This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix; otherwise, only the maximum number of PCs will be reported in the results. </p>
+<p>Number of principal components (PCs) to compute. This should be no greater than the maximum number of PCs, i.e., the smaller dimension of the input matrix, otherwise an error will be thrown. (This error can be avoided by setting <code><a class="elRef" href="https://ltla.github.io/CppIrlba/structirlba_1_1Options.html#a4e6e040a6ff921f48c70961ad9876c31">irlba::Options::cap_number</a> = true</code> in <code><a class="el" href="structscran__pca_1_1BlockedPcaOptions.html#a4e3ca5a977c555fdf742b8a5373a0417">BlockedPcaOptions::irlba_options</a></code>, in which case only the maximum number of PCs will be reported in the results.) </p>
 
 </div>
 </div>
